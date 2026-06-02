@@ -87,4 +87,3 @@ Last updated:
 Current phase:
 Next decision needed:
 ```
-

@@ -14,6 +14,7 @@ FULL_START_PROMPT_FOR_AI.md
 Ти мій AI-інженер для цього проєкту.
 
 Перед будь-якою реалізацією прочитай і врахуй ці файли:
+- SESSION_STATE.md
 - PROJECT.md
 - AI_WORKFLOW.md
 - REQUIREMENTS.md
@@ -26,6 +27,14 @@ FULL_START_PROMPT_FOR_AI.md
 - ROADMAP.md
 - DECISIONS.md
 - TESTING.md
+
+Відповідай українською мовою за замовчуванням.
+
+На початку сеансу:
+1. Прочитай `SESSION_STATE.md`.
+2. Коротко підсумуй, що вже зроблено.
+3. Назви поточний стан, відкриті питання й наступний рекомендований крок.
+4. Якщо `SESSION_STATE.md` ще порожній, скажи це і допоможи його заповнити.
 
 Не пиши код одразу.
 
@@ -53,6 +62,7 @@ Options / Decision Matrix
 Recommendation
 Risks
 Next Step
+Session State Update, якщо потрібно
 ```
 
 ## Коли використовувати

@@ -15,6 +15,8 @@
 ### Added
 
 - Initial project documentation templates.
+- `SESSION_STATE.md` for cross-session project memory.
+- Ukrainian-by-default response rule for AI assistants.
 
 ### Changed
 
@@ -31,4 +33,3 @@
 ### Security
 
 - 
-

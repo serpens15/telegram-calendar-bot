@@ -46,9 +46,9 @@ class EventConfirmationServiceTest(unittest.TestCase):
             draft = self._complete_draft()
             preview = service.preview_or_clarify(111, draft)
 
-            self.assertIn("Preview:", preview)
-            self.assertIn("Title: зустріч", preview)
-            self.assertIn("Timezone: Europe/Kyiv", preview)
+            self.assertIn("Попередній перегляд:", preview)
+            self.assertIn("Назва: зустріч", preview)
+            self.assertIn("Часовий пояс: Europe/Kyiv", preview)
             self.assertIn("UTC:", preview)
             self.assertIs(service.get_pending(111), draft)
 
@@ -94,6 +94,36 @@ class EventConfirmationServiceTest(unittest.TestCase):
 
             self.assertTrue(cancelled)
             self.assertIsNone(service.get_pending(111))
+            self.assertEqual(repo.list_events_for_user(111), [])
+
+    def test_list_events_and_delete_flow(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+            service = EventConfirmationService(
+                repository=repo,
+                timezone_service=TimezoneService(
+                    repository=repo,
+                    default_timezone="Europe/Kyiv",
+                ),
+                default_timezone="Europe/Kyiv",
+            )
+            event = repo.create_event(
+                111,
+                title="Planning",
+                event_at="2026-06-07T15:00:00+03:00",
+                event_at_utc="2026-06-07T12:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+
+            list_text = service.build_events_list_text(111)
+            preview_text = service.request_delete(111, event.id)
+            deleted_event = service.confirm_pending_delete(111)
+
+            self.assertIn("Найближчі події:", list_text)
+            self.assertIn("Planning", list_text)
+            self.assertIn("Видалити цю подію?", preview_text)
+            self.assertEqual(deleted_event.id, event.id)
             self.assertEqual(repo.list_events_for_user(111), [])
 
 

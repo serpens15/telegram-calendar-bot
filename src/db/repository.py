@@ -191,6 +191,47 @@ class SQLiteRepository:
             ).fetchone()
         return _row_to_dataclass(EventRecord, row)
 
+    def get_event_for_user(
+        self,
+        telegram_id: int,
+        event_id: int,
+    ) -> EventRecord | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT events.*
+                FROM events
+                JOIN users ON users.id = events.user_id
+                WHERE users.telegram_id = ? AND events.id = ?
+                """,
+                (telegram_id, event_id),
+            ).fetchone()
+        return _row_to_dataclass(EventRecord, row)
+
+    def delete_event_for_user(
+        self,
+        telegram_id: int,
+        event_id: int,
+    ) -> EventRecord | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT events.*
+                FROM events
+                JOIN users ON users.id = events.user_id
+                WHERE users.telegram_id = ? AND events.id = ?
+                """,
+                (telegram_id, event_id),
+            ).fetchone()
+            if row is None:
+                return None
+
+            connection.execute(
+                "DELETE FROM events WHERE id = ?",
+                (event_id,),
+            )
+        return _row_to_dataclass(EventRecord, row)
+
     def get_reminder_by_id(self, reminder_id: int) -> ReminderRecord | None:
         with self.connect() as connection:
             row = connection.execute(

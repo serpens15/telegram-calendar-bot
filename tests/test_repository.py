@@ -91,6 +91,35 @@ class SQLiteRepositoryTest(unittest.TestCase):
             self.assertEqual(len(event_reminders), 1)
             self.assertEqual(event_reminders[0].id, reminder.id)
 
+    def test_delete_event_for_user_removes_matching_event_only(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+
+            first_event = repo.create_event(
+                222,
+                title="Team sync",
+                event_at="2026-06-06T10:00:00+03:00",
+                event_at_utc="2026-06-06T07:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+            second_event = repo.create_event(
+                333,
+                title="Other sync",
+                event_at="2026-06-06T11:00:00+03:00",
+                event_at_utc="2026-06-06T08:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+
+            deleted = repo.delete_event_for_user(222, first_event.id)
+            missing = repo.delete_event_for_user(222, second_event.id)
+
+            self.assertIsNotNone(deleted)
+            self.assertEqual(deleted.id, first_event.id)
+            self.assertIsNone(missing)
+            self.assertEqual(repo.list_events_for_user(222), [])
+            self.assertEqual(repo.list_events_for_user(333)[0].id, second_event.id)
+
 
 if __name__ == "__main__":
     unittest.main()

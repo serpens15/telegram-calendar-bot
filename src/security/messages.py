@@ -5,6 +5,6 @@ from __future__ import annotations
 
 def access_denied_text() -> str:
     return (
-        "Access denied.\n\n"
-        "Your Telegram account is not in the allow list for this bot."
+        "Доступ заборонено.\n\n"
+        "Ваш Telegram-акаунт не входить до списку дозволених для цього бота."
     )

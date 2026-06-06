@@ -36,13 +36,13 @@ async def run_bot() -> None:
     )
     access_control.sync_allow_list()
 
+    timezone_service = TimezoneService(
+        repository=repository,
+        default_timezone=settings.default_timezone,
+    )
     event_confirmation = EventConfirmationService(
         repository=repository,
         timezone_service=timezone_service,
-        default_timezone=settings.default_timezone,
-    )
-    timezone_service = TimezoneService(
-        repository=repository,
         default_timezone=settings.default_timezone,
     )
 

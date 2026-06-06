@@ -39,6 +39,14 @@ class _FakeRouter:
         self.message = _FakeObserver()
 
 
+class _FakeAccessControl:
+    def __init__(self, allowed_ids: set[int] | None = None):
+        self.allowed_ids = allowed_ids or set()
+
+    def is_allowed(self, telegram_id):
+        return telegram_id in self.allowed_ids
+
+
 def _install_fake_aiogram() -> dict[str, types.ModuleType]:
     aiogram = types.ModuleType("aiogram")
     aiogram.Router = _FakeRouter
@@ -69,7 +77,7 @@ def _install_fake_aiogram() -> dict[str, types.ModuleType]:
 class BotHandlersTest(unittest.TestCase):
     def test_build_router_registers_start_and_help_handlers(self) -> None:
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router()
+            router = build_router(_FakeAccessControl({111}))
 
         handler_names = [handler.callback.__name__ for handler in router.message.handlers]
 
@@ -77,13 +85,14 @@ class BotHandlersTest(unittest.TestCase):
 
     def test_start_handler_answers_with_start_text(self) -> None:
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router()
+            router = build_router(_FakeAccessControl({111}))
             start_handler = next(
                 handler.callback
                 for handler in router.message.handlers
                 if handler.callback.__name__ == "handle_start"
             )
             message = AsyncMock()
+            message.from_user.id = 111
 
             with patch("bot.handlers.start_text", return_value="start response"):
                 asyncio.run(start_handler(message))
@@ -92,18 +101,35 @@ class BotHandlersTest(unittest.TestCase):
 
     def test_help_handler_answers_with_help_text(self) -> None:
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router()
+            router = build_router(_FakeAccessControl({111}))
             help_handler = next(
                 handler.callback
                 for handler in router.message.handlers
                 if handler.callback.__name__ == "handle_help"
             )
             message = AsyncMock()
+            message.from_user.id = 111
 
             with patch("bot.handlers.help_text", return_value="help response"):
                 asyncio.run(help_handler(message))
 
         message.answer.assert_awaited_once_with("help response")
+
+    def test_start_handler_denies_unauthorized_user(self) -> None:
+        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
+            router = build_router(_FakeAccessControl(set()))
+            start_handler = next(
+                handler.callback
+                for handler in router.message.handlers
+                if handler.callback.__name__ == "handle_start"
+            )
+            message = AsyncMock()
+            message.from_user.id = 999
+
+            asyncio.run(start_handler(message))
+
+        message.answer.assert_awaited_once()
+        self.assertIn("Access denied.", message.answer.await_args.args[0])
 
 
 if __name__ == "__main__":

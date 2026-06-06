@@ -7,6 +7,8 @@ import logging
 
 from .handlers import build_router
 from config.settings import load_settings
+from db.repository import SQLiteRepository
+from security.access_control import AccessControlService
 
 
 def _configure_logging(level_name: str) -> None:
@@ -23,9 +25,18 @@ async def run_bot() -> None:
     settings = load_settings()
     _configure_logging(settings.log_level)
 
+    repository = SQLiteRepository(settings.database_path)
+    repository.initialize()
+
+    access_control = AccessControlService(
+        allowed_telegram_ids=settings.allowed_telegram_ids,
+        repository=repository,
+    )
+    access_control.sync_allow_list()
+
     bot = Bot(token=settings.telegram_bot_token)
     dispatcher = Dispatcher()
-    dispatcher.include_router(build_router())
+    dispatcher.include_router(build_router(access_control))
 
     logging.getLogger(__name__).info(
         "Starting Telegram Calendar Bot in %s mode with timezone %s",

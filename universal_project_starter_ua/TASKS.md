@@ -247,7 +247,7 @@ Test Scenarios:
 - Negative: сторонній користувач не має доступу.
 - Edge: порожній список доступу блокує всі запити передбачувано.
 
-Status: Not started
+Status: Done
 
 ### TASK-006: Text Event Parsing
 

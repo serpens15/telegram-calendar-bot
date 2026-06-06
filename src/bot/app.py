@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 from .handlers import build_router
-from .settings import load_settings
+from config.settings import load_settings
 
 
 def _configure_logging(level_name: str) -> None:
@@ -50,4 +50,3 @@ def main() -> int:
         return 0
 
     return 0
-

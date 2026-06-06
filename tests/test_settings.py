@@ -14,7 +14,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from bot.settings import load_settings
+from config.settings import load_settings
 
 
 class BotSettingsTest(unittest.TestCase):
@@ -38,7 +38,7 @@ class BotSettingsTest(unittest.TestCase):
 
     def test_load_settings_uses_defaults_when_values_missing(self) -> None:
         with patch.dict(os.environ, {}, clear=True), patch(
-            "bot.settings._load_dotenv_file"
+            "config.settings._load_dotenv_file"
         ):
             settings = load_settings()
 
@@ -65,7 +65,7 @@ class BotSettingsTest(unittest.TestCase):
             )
 
             with patch.dict(os.environ, {}, clear=True), patch(
-                "bot.settings.Path.cwd", return_value=Path(temp_dir)
+                "config.settings.Path.cwd", return_value=Path(temp_dir)
             ):
                 settings = load_settings()
 

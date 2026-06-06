@@ -165,7 +165,7 @@ Test Scenarios:
 - Negative: відсутній токен дає чітку помилку.
 - Edge: додаткові змінні не ламають старт.
 
-Status: Not started
+Status: Done
 
 ### TASK-004: SQLite Schema and Repository Layer
 

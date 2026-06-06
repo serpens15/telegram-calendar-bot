@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telegram-calendar-bot"
+version = "0.1.0"
+description = "Telegram bot for creating calendar reminders from text and voice messages."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "aiogram>=3.7,<4",
+]
+license = { text = "Proprietary" }
+authors = [
+  { name = "vital" }
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

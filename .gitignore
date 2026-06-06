@@ -1,0 +1,47 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Secrets
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+
+# Dependencies
+node_modules/
+vendor/
+.venv/
+venv/
+__pycache__/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Databases for local development
+*.sqlite
+*.sqlite3
+*.db
+

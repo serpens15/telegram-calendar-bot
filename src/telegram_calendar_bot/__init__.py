@@ -1,0 +1,2 @@
+"""Telegram Calendar Bot package."""
+

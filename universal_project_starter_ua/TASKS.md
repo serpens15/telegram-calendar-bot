@@ -84,7 +84,7 @@ Test Scenarios:
 - Negative: відсутній `.env` дає зрозумілу помилку.
 - Edge: повторний локальний запуск не ламає проєкт.
 
-Status: Not started
+Status: Done
 
 ### TASK-002: Bot Skeleton
 
@@ -125,7 +125,7 @@ Test Scenarios:
 - Negative: невідома команда не падає.
 - Edge: порожнє повідомлення обробляється без помилки.
 
-Status: Not started
+Status: Done
 
 ### TASK-003: Configuration and Settings
 

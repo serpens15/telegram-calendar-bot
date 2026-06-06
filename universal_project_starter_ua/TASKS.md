@@ -34,9 +34,9 @@ Status:
 ## Current Sprint / Current Phase
 
 ```text
-Goal:
-Focus:
-Do not work on:
+Goal: Підняти MVP Telegram Calendar Bot локально і реалізувати перший вертикальний сценарій.
+Focus: bootstrap, текстова подія, збереження в SQLite, базові reminders.
+Do not work on: Google Calendar, веб-панель, повторювані події, монетизація.
 ```
 
 ## Tasks
@@ -46,29 +46,503 @@ Do not work on:
 Goal:
 
 ```text
-[Створити базову структуру проєкту.]
+Створити базову структуру Python-проєкту для Telegram Calendar Bot.
+```
+
+Files:
+
+```text
+pyproject.toml або requirements.txt
+src/
+README.md
+.env.example
+.gitignore
+```
+
+Dependencies:
+
+```text
+None
 ```
 
 Acceptance Criteria:
 
-- [ ] Проєкт запускається локально.
-- [ ] Є `.env.example`.
-- [ ] Є README з базовою інструкцією.
-- [ ] Немає реальних секретів у коді.
+- [ ] Є базова структура проєкту.
+- [ ] Є приклад `.env.example`.
+- [ ] `.env` не потрапляє в git.
+- [ ] Зрозуміло, як запускати локально.
+
+Risks:
+
+```text
+Неправильно обрана структура може ускладнити подальше розширення.
+```
+
+Test Scenarios:
+
+- Positive: структура створена, конфігурація читається.
+- Negative: відсутній `.env` дає зрозумілу помилку.
+- Edge: повторний локальний запуск не ламає проєкт.
 
 Status: Not started
 
-### TASK-002: [Назва задачі]
+### TASK-002: Bot Skeleton
 
 Goal:
 
 ```text
-[Опис.]
+Підняти мінімальний aiogram-бот з командами /start і /help.
+```
+
+Files:
+
+```text
+src/bot/*
+src/main.py
+```
+
+Dependencies:
+
+```text
+TASK-001
 ```
 
 Acceptance Criteria:
 
-- [ ] ...
+- [ ] Бот стартує локально.
+- [ ] /start відповідає коротким описом.
+- [ ] /help показує доступні команди.
+
+Risks:
+
+```text
+Невірна обробка update може зламати базовий чат-флоу.
+```
+
+Test Scenarios:
+
+- Positive: /start і /help працюють.
+- Negative: невідома команда не падає.
+- Edge: порожнє повідомлення обробляється без помилки.
 
 Status: Not started
 
+### TASK-003: Configuration and Settings
+
+Goal:
+
+```text
+Додати конфігурацію через environment variables і завантаження налаштувань.
+```
+
+Files:
+
+```text
+src/config/*
+```
+
+Dependencies:
+
+```text
+TASK-001
+```
+
+Acceptance Criteria:
+
+- [ ] Токен бота читається з `.env`.
+- [ ] Часовий пояс за замовчуванням задається через конфіг.
+- [ ] Налаштування не хардкодяться в коді.
+
+Risks:
+
+```text
+Некоректна конфігурація може зупинити запуск бота.
+```
+
+Test Scenarios:
+
+- Positive: валідний `.env` запускає проєкт.
+- Negative: відсутній токен дає чітку помилку.
+- Edge: додаткові змінні не ламають старт.
+
+Status: Not started
+
+### TASK-004: SQLite Schema and Repository Layer
+
+Goal:
+
+```text
+Створити таблиці для users, events, reminders і allowed users.
+```
+
+Files:
+
+```text
+src/db/*
+```
+
+Dependencies:
+
+```text
+TASK-001
+TASK-003
+```
+
+Acceptance Criteria:
+
+- [ ] Структура БД описана.
+- [ ] Є сховище для timezone користувача.
+- [ ] Є сховище для подій і нагадувань.
+
+Risks:
+
+```text
+Схема без timezone або reminder fields ускладнить майбутню логіку.
+```
+
+Test Scenarios:
+
+- Positive: запис і читання події працюють.
+- Negative: некоректні дані відхиляються.
+- Edge: порожня база відкривається без помилки.
+
+Status: Not started
+
+### TASK-005: Access Control for MVP
+
+Goal:
+
+```text
+Обмежити доступ до бота списком дозволених Telegram ID.
+```
+
+Files:
+
+```text
+src/security/*
+```
+
+Dependencies:
+
+```text
+TASK-002
+TASK-004
+```
+
+Acceptance Criteria:
+
+- [ ] Дозволений користувач проходить перевірку.
+- [ ] Недозволений користувач отримує відмову.
+- [ ] Адмін-ID можна зберігати в конфігурації або БД.
+
+Risks:
+
+```text
+Помилка в ACL може відкрити бот для небажаних користувачів.
+```
+
+Test Scenarios:
+
+- Positive: allow-listed user користується ботом.
+- Negative: сторонній користувач не має доступу.
+- Edge: порожній список доступу блокує всі запити передбачувано.
+
+Status: Not started
+
+### TASK-006: Text Event Parsing
+
+Goal:
+
+```text
+Реалізувати парсинг текстових подій у простій природній мові.
+```
+
+Files:
+
+```text
+src/parsing/*
+```
+
+Dependencies:
+
+```text
+TASK-002
+TASK-003
+TASK-004
+```
+
+Acceptance Criteria:
+
+- [ ] Підтримується формат на кшталт "завтра о 15:00 зустріч".
+- [ ] Виділяються назва, дата і час.
+- [ ] Невпевнені випадки йдуть у flow уточнення.
+
+Risks:
+
+```text
+Надто агресивний парсинг може неправильно інтерпретувати подію.
+```
+
+Test Scenarios:
+
+- Positive: типові формати розпізнаються.
+- Negative: некоректна дата не проходить.
+- Edge: текст без часу викликає уточнення.
+
+Status: Not started
+
+### TASK-007: Event Confirmation Flow
+
+Goal:
+
+```text
+Показати користувачу підсумок події і зберігати її тільки після підтвердження.
+```
+
+Files:
+
+```text
+src/bot/handlers/*
+src/services/*
+```
+
+Dependencies:
+
+```text
+TASK-006
+TASK-004
+```
+
+Acceptance Criteria:
+
+- [ ] Є preview події.
+- [ ] Підтвердження створює подію.
+- [ ] Скасування не зберігає дані.
+
+Risks:
+
+```text
+Погано організований state machine може ламати сценарій.
+```
+
+Test Scenarios:
+
+- Positive: confirm зберігає подію.
+- Negative: cancel очищає сценарій.
+- Edge: повторне підтвердження не створює дубль.
+
+Status: Not started
+
+### TASK-008: Voice Transcription Flow
+
+Goal:
+
+```text
+Приймати voice message і перетворювати його в текст через Whisper.
+```
+
+Files:
+
+```text
+src/voice/*
+src/services/*
+```
+
+Dependencies:
+
+```text
+TASK-002
+TASK-006
+```
+
+Acceptance Criteria:
+
+- [ ] Бот приймає voice message.
+- [ ] Аудіо транскрибується в текст.
+- [ ] Транскрибований текст проходить той самий сценарій, що й текст.
+
+Risks:
+
+```text
+Помилки Whisper або завантаження файлу можуть зламати сценарій.
+```
+
+Test Scenarios:
+
+- Positive: voice успішно розпізнається.
+- Negative: пошкоджений audio дає чітку помилку.
+- Edge: дуже коротке voice повідомлення обробляється без падіння.
+
+Status: Not started
+
+### TASK-009: Reminder Scheduler
+
+Goal:
+
+```text
+Додати локальні нагадування через APScheduler.
+```
+
+Files:
+
+```text
+src/scheduler/*
+src/services/*
+```
+
+Dependencies:
+
+```text
+TASK-004
+TASK-007
+```
+
+Acceptance Criteria:
+
+- [ ] Нагадування планується при створенні події.
+- [ ] Бот надсилає нагадування у потрібний час.
+- [ ] Після рестарту активні нагадування відновлюються з БД.
+
+Risks:
+
+```text
+Задачі можуть загубитися при рестарті без механізму відновлення.
+```
+
+Test Scenarios:
+
+- Positive: reminder відправляється вчасно.
+- Negative: недоступний Telegram API логуватиметься.
+- Edge: перезапуск не втрачає заплановані події.
+
+Status: Not started
+
+### TASK-010: List and Delete Commands
+
+Goal:
+
+```text
+Реалізувати /list і /delete для керування подіями.
+```
+
+Files:
+
+```text
+src/bot/handlers/*
+src/services/*
+```
+
+Dependencies:
+
+```text
+TASK-004
+TASK-007
+```
+
+Acceptance Criteria:
+
+- [ ] /list показує найближчі події.
+- [ ] /delete запускає видалення.
+- [ ] Подія видаляється тільки після підтвердження.
+
+Risks:
+
+```text
+Невдалий UX списку може ускладнити вибір події.
+```
+
+Test Scenarios:
+
+- Positive: список повертається коректно.
+- Negative: відсутні події обробляються без помилки.
+- Edge: багато подій не ламають форматування.
+
+Status: Not started
+
+### TASK-011: Timezone Handling
+
+Goal:
+
+```text
+Додати збереження і зміну timezone користувача.
+```
+
+Files:
+
+```text
+src/bot/handlers/*
+src/db/*
+src/services/*
+```
+
+Dependencies:
+
+```text
+TASK-004
+TASK-002
+```
+
+Acceptance Criteria:
+
+- [ ] Часовий пояс зберігається для кожного користувача.
+- [ ] /timezone змінює значення.
+- [ ] Події та reminders працюють у правильному timezone.
+
+Risks:
+
+```text
+Помилки timezone можуть зсунути нагадування на годину і більше.
+```
+
+Test Scenarios:
+
+- Positive: timezone змінюється коректно.
+- Negative: невідомий timezone відхиляється.
+- Edge: DST переходи не ламають збереження часу.
+
+Status: Not started
+
+### TASK-012: Testing and Documentation
+
+Goal:
+
+```text
+Перевірити базові сценарії та оновити документацію під MVP.
+```
+
+Files:
+
+```text
+tests/*
+README.md
+PROJECT.md
+REQUIREMENTS.md
+ARCHITECTURE.md
+TASKS.md
+```
+
+Dependencies:
+
+```text
+TASK-002 through TASK-011
+```
+
+Acceptance Criteria:
+
+- [ ] Є позитивні, негативні та edge-case тести.
+- [ ] Документація відповідає реальній реалізації.
+- [ ] Немає розбіжностей між планом і кодом.
+
+Risks:
+
+```text
+Без тестів і документації MVP швидко деградує.
+```
+
+Test Scenarios:
+
+- Positive: основний flow проходить.
+- Negative: неправильний input не ламає бот.
+- Edge: відновлення після рестарту перевірене.
+
+Status: Not started

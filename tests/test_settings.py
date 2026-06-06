@@ -24,6 +24,7 @@ class BotSettingsTest(unittest.TestCase):
             "APP_ENV": "production",
             "LOG_LEVEL": "debug",
             "DEFAULT_TIMEZONE": "Europe/Warsaw",
+            "DEFAULT_REMINDER_MINUTES": "20",
             "DATABASE_PATH": "data/test.sqlite3",
             "ALLOWED_TELEGRAM_IDS": "10, 20, x, 30",
         }
@@ -35,6 +36,7 @@ class BotSettingsTest(unittest.TestCase):
         self.assertEqual(settings.app_env, "production")
         self.assertEqual(settings.log_level, "debug")
         self.assertEqual(settings.default_timezone, "Europe/Warsaw")
+        self.assertEqual(settings.default_reminder_minutes, 20)
         self.assertEqual(settings.database_path, "data/test.sqlite3")
         self.assertEqual(settings.allowed_telegram_ids, (10, 20, 30))
 
@@ -48,6 +50,7 @@ class BotSettingsTest(unittest.TestCase):
         self.assertEqual(settings.app_env, "development")
         self.assertEqual(settings.log_level, "info")
         self.assertEqual(settings.default_timezone, "Europe/Kyiv")
+        self.assertEqual(settings.default_reminder_minutes, 15)
         self.assertEqual(settings.database_path, "telegram_calendar.sqlite3")
         self.assertEqual(settings.allowed_telegram_ids, ())
 
@@ -61,6 +64,7 @@ class BotSettingsTest(unittest.TestCase):
                         "APP_ENV=staging",
                         "LOG_LEVEL=warning",
                         "DEFAULT_TIMEZONE=Europe/Berlin",
+                        "DEFAULT_REMINDER_MINUTES=30",
                         "DATABASE_PATH=data/file.sqlite3",
                         "ALLOWED_TELEGRAM_IDS=100, 200, bad, 300",
                     ]
@@ -77,6 +81,7 @@ class BotSettingsTest(unittest.TestCase):
         self.assertEqual(settings.app_env, "staging")
         self.assertEqual(settings.log_level, "warning")
         self.assertEqual(settings.default_timezone, "Europe/Berlin")
+        self.assertEqual(settings.default_reminder_minutes, 30)
         self.assertEqual(settings.database_path, "data/file.sqlite3")
         self.assertEqual(settings.allowed_telegram_ids, (100, 200, 300))
 

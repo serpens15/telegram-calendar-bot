@@ -49,6 +49,7 @@ class EventConfirmationServiceTest(unittest.TestCase):
             self.assertIn("Попередній перегляд:", preview)
             self.assertIn("Назва: зустріч", preview)
             self.assertIn("Часовий пояс: Europe/Kyiv", preview)
+            self.assertIn("Нагадування: за 15 хвилин до події", preview)
             self.assertIn("UTC:", preview)
             self.assertIs(service.get_pending(111), draft)
 
@@ -75,6 +76,10 @@ class EventConfirmationServiceTest(unittest.TestCase):
             self.assertEqual(event.event_at_utc, "2026-06-07T12:00:00+00:00")
             self.assertEqual(service.get_pending(111), None)
             self.assertEqual(repo.list_events_for_user(111)[0].id, event.id)
+            reminders = repo.list_reminders_for_event(event.id)
+            self.assertEqual(len(reminders), 1)
+            self.assertEqual(reminders[0].reminder_at, "2026-06-07T14:45:00+03:00")
+            self.assertEqual(reminders[0].status, "pending")
 
     def test_cancel_clears_pending_without_creating_event(self) -> None:
         with TemporaryDirectory() as temp_dir:

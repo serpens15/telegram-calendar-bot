@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from .handlers import build_router
 from config.settings import load_settings
 from db.repository import SQLiteRepository
+from scheduler.reminder_scheduler import ReminderSchedulerService
 from security.access_control import AccessControlService
 from services.event_confirmation import EventConfirmationService
 from services.timezone_service import TimezoneService
+
+from .handlers import build_router
 
 
 def _configure_logging(level_name: str) -> None:
@@ -40,16 +42,29 @@ async def run_bot() -> None:
         repository=repository,
         default_timezone=settings.default_timezone,
     )
+
+    bot = Bot(token=settings.telegram_bot_token)
+    reminder_scheduler = ReminderSchedulerService(
+        repository=repository,
+        timezone_service=timezone_service,
+        bot=bot,
+        default_reminder_minutes=settings.default_reminder_minutes,
+    )
     event_confirmation = EventConfirmationService(
         repository=repository,
         timezone_service=timezone_service,
         default_timezone=settings.default_timezone,
+        default_reminder_minutes=settings.default_reminder_minutes,
     )
 
-    bot = Bot(token=settings.telegram_bot_token)
     dispatcher = Dispatcher()
     dispatcher.include_router(
-        build_router(access_control, event_confirmation, timezone_service)
+        build_router(
+            access_control,
+            event_confirmation,
+            timezone_service,
+            reminder_scheduler,
+        )
     )
 
     logging.getLogger(__name__).info(
@@ -57,7 +72,13 @@ async def run_bot() -> None:
         settings.app_env,
         settings.default_timezone,
     )
-    await dispatcher.start_polling(bot)
+
+    reminder_scheduler.start()
+    try:
+        await dispatcher.start_polling(bot)
+    finally:
+        reminder_scheduler.shutdown()
+        await bot.session.close()
 
 
 def main() -> int:

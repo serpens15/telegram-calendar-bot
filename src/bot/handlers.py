@@ -5,6 +5,12 @@ from __future__ import annotations
 from datetime import date
 
 from parsing import parse_event_text
+from scheduler.reminder_scheduler import ReminderSchedulerService
+from security.access_control import AccessControlService
+from security.messages import access_denied_text
+from services.event_confirmation import EventConfirmationService
+from services.timezone_service import TimezoneService
+
 from .messages import (
     ADD_BUTTON,
     CANCEL_BUTTON,
@@ -19,16 +25,13 @@ from .messages import (
     main_menu_keyboard,
     start_text,
 )
-from security.access_control import AccessControlService
-from security.messages import access_denied_text
-from services.event_confirmation import EventConfirmationService
-from services.timezone_service import TimezoneService
 
 
 def build_router(
     access_control: AccessControlService | None = None,
     event_confirmation: EventConfirmationService | None = None,
     timezone_service: TimezoneService | None = None,
+    reminder_scheduler: ReminderSchedulerService | None = None,
 ):
     from aiogram import Router
     from aiogram.filters import Command
@@ -103,6 +106,8 @@ def build_router(
             f"Коли: {event.event_at}\n"
             f"Часовий пояс: {event.timezone}"
         )
+        if reminder_scheduler is not None:
+            reminder_scheduler.schedule_event_reminders(event.id)
 
     async def _send_cancel(message: Message) -> None:
         if event_confirmation is None:

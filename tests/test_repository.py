@@ -60,11 +60,13 @@ class SQLiteRepositoryTest(unittest.TestCase):
             repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
             repo.initialize()
 
-            event = repo.create_event(
+            event, reminder_from_event = repo.create_event_with_reminder(
                 222,
                 title="Team sync",
                 event_at="2026-06-06T10:00:00+03:00",
                 event_at_utc="2026-06-06T07:00:00+00:00",
+                reminder_at="2026-06-06T09:45:00+03:00",
+                reminder_at_utc="2026-06-06T06:45:00+00:00",
                 timezone="Europe/Kyiv",
                 source_text="tomorrow at 10:00",
             )
@@ -76,6 +78,7 @@ class SQLiteRepositoryTest(unittest.TestCase):
 
             stored_event = repo.get_event_by_id(event.id)
             stored_reminder = repo.get_reminder_by_id(reminder.id)
+            reminder_context = repo.get_reminder_context(reminder_from_event.id)
             user_events = repo.list_events_for_user(222)
             event_reminders = repo.list_reminders_for_event(event.id)
 
@@ -84,12 +87,20 @@ class SQLiteRepositoryTest(unittest.TestCase):
             self.assertEqual(stored_event.event_at_utc, "2026-06-06T07:00:00+00:00")
             self.assertEqual(stored_event.timezone, "Europe/Kyiv")
             self.assertEqual(stored_event.source_text, "tomorrow at 10:00")
+            self.assertEqual(reminder_from_event.reminder_at, "2026-06-06T09:45:00+03:00")
+            self.assertEqual(reminder_from_event.reminder_at_utc, "2026-06-06T06:45:00+00:00")
+            self.assertIsNotNone(reminder_context)
+            self.assertEqual(reminder_context.telegram_id, 222)
+            self.assertEqual(reminder_context.event.id, event.id)
             self.assertEqual(stored_reminder.reminder_at, "2026-06-06T09:45:00+03:00")
             self.assertEqual(stored_reminder.reminder_at_utc, "2026-06-06T06:45:00+00:00")
             self.assertEqual(len(user_events), 1)
             self.assertEqual(user_events[0].id, event.id)
-            self.assertEqual(len(event_reminders), 1)
-            self.assertEqual(event_reminders[0].id, reminder.id)
+            self.assertEqual(len(event_reminders), 2)
+            self.assertEqual({item.id for item in event_reminders}, {reminder_from_event.id, reminder.id})
+            pending_reminders = repo.list_pending_reminders()
+
+            self.assertEqual(len(pending_reminders), 2)
 
     def test_delete_event_for_user_removes_matching_event_only(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -47,3 +47,11 @@ class ReminderRecord:
     sent_at: str | None
     created_at: str
     updated_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class ReminderDispatchContext:
+    reminder: ReminderRecord
+    event: EventRecord
+    telegram_id: int
+    timezone: str

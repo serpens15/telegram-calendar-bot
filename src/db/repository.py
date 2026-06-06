@@ -7,7 +7,13 @@ from pathlib import Path
 import sqlite3
 from typing import Iterator
 
-from .models import AllowedUserRecord, EventRecord, ReminderRecord, UserRecord
+from .models import (
+    AllowedUserRecord,
+    EventRecord,
+    ReminderDispatchContext,
+    ReminderRecord,
+    UserRecord,
+)
 from .schema import SCHEMA_SQL
 
 
@@ -158,6 +164,55 @@ class SQLiteRepository:
             ).fetchone()
         return _row_to_dataclass(EventRecord, row)
 
+    def create_event_with_reminder(
+        self,
+        telegram_id: int,
+        *,
+        title: str,
+        event_at: str,
+        event_at_utc: str,
+        reminder_at: str,
+        reminder_at_utc: str,
+        timezone: str | None = None,
+        source_text: str | None = None,
+    ) -> tuple[EventRecord, ReminderRecord]:
+        user = self.get_or_create_user(telegram_id, timezone=timezone or "Europe/Kyiv")
+        event_timezone = timezone or user.timezone
+
+        with self.connect() as connection:
+            event_cursor = connection.execute(
+                """
+                INSERT INTO events (
+                    user_id, title, event_at, event_at_utc, timezone, source_text
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (user.id, title, event_at, event_at_utc, event_timezone, source_text),
+            )
+            event_row = connection.execute(
+                "SELECT * FROM events WHERE id = ?",
+                (event_cursor.lastrowid,),
+            ).fetchone()
+
+            reminder_cursor = connection.execute(
+                """
+                INSERT INTO reminders (
+                    event_id, reminder_at, reminder_at_utc, status, sent_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (event_cursor.lastrowid, reminder_at, reminder_at_utc, "pending", None),
+            )
+            reminder_row = connection.execute(
+                "SELECT * FROM reminders WHERE id = ?",
+                (reminder_cursor.lastrowid,),
+            ).fetchone()
+
+        return _row_to_dataclass(EventRecord, event_row), _row_to_dataclass(
+            ReminderRecord,
+            reminder_row,
+        )
+
     def create_reminder(
         self,
         event_id: int,
@@ -234,6 +289,102 @@ class SQLiteRepository:
 
     def get_reminder_by_id(self, reminder_id: int) -> ReminderRecord | None:
         with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM reminders WHERE id = ?",
+                (reminder_id,),
+            ).fetchone()
+        return _row_to_dataclass(ReminderRecord, row)
+
+    def get_reminder_context(
+        self,
+        reminder_id: int,
+    ) -> ReminderDispatchContext | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    reminders.id AS reminder_id,
+                    reminders.event_id AS reminder_event_id,
+                    reminders.reminder_at AS reminder_reminder_at,
+                    reminders.reminder_at_utc AS reminder_reminder_at_utc,
+                    reminders.status AS reminder_status,
+                    reminders.sent_at AS reminder_sent_at,
+                    reminders.created_at AS reminder_created_at,
+                    reminders.updated_at AS reminder_updated_at,
+                    events.id AS event_id,
+                    events.user_id AS event_user_id,
+                    events.title AS event_title,
+                    events.event_at AS event_event_at,
+                    events.event_at_utc AS event_event_at_utc,
+                    events.timezone AS event_timezone,
+                    events.source_text AS event_source_text,
+                    events.created_at AS event_created_at,
+                    events.updated_at AS event_updated_at,
+                    users.telegram_id AS user_telegram_id,
+                    users.timezone AS user_timezone
+                FROM reminders
+                JOIN events ON events.id = reminders.event_id
+                JOIN users ON users.id = events.user_id
+                WHERE reminders.id = ?
+                """,
+                (reminder_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        reminder = ReminderRecord(
+            id=row["reminder_id"],
+            event_id=row["reminder_event_id"],
+            reminder_at=row["reminder_reminder_at"],
+            reminder_at_utc=row["reminder_reminder_at_utc"],
+            status=row["reminder_status"],
+            sent_at=row["reminder_sent_at"],
+            created_at=row["reminder_created_at"],
+            updated_at=row["reminder_updated_at"],
+        )
+        event = EventRecord(
+            id=row["event_id"],
+            user_id=row["event_user_id"],
+            title=row["event_title"],
+            event_at=row["event_event_at"],
+            event_at_utc=row["event_event_at_utc"],
+            timezone=row["event_timezone"],
+            source_text=row["event_source_text"],
+            created_at=row["event_created_at"],
+            updated_at=row["event_updated_at"],
+        )
+        return ReminderDispatchContext(
+            reminder=reminder,
+            event=event,
+            telegram_id=row["user_telegram_id"],
+            timezone=row["user_timezone"],
+        )
+
+    def list_pending_reminders(self) -> list[ReminderRecord]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM reminders
+                WHERE status = 'pending'
+                ORDER BY reminder_at_utc ASC, id ASC
+                """
+            ).fetchall()
+        return [_row_to_dataclass(ReminderRecord, row) for row in rows]
+
+    def mark_reminder_sent(self, reminder_id: int, sent_at: str) -> ReminderRecord | None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE reminders
+                SET status = 'sent',
+                    sent_at = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (sent_at, reminder_id),
+            )
             row = connection.execute(
                 "SELECT * FROM reminders WHERE id = ?",
                 (reminder_id,),

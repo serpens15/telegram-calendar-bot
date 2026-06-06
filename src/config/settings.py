@@ -13,6 +13,7 @@ class BotSettings:
     app_env: str
     log_level: str
     default_timezone: str
+    default_reminder_minutes: int
     database_path: str
     allowed_telegram_ids: tuple[int, ...]
 
@@ -28,6 +29,13 @@ def _parse_allowed_ids(raw_value: str) -> tuple[int, ...]:
         except ValueError:
             continue
     return tuple(ids)
+
+
+def _parse_int(raw_value: str, default: int) -> int:
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _load_dotenv_file(path: Path) -> None:
@@ -61,6 +69,10 @@ def load_settings() -> BotSettings:
         app_env=os.getenv("APP_ENV", "development").strip(),
         log_level=os.getenv("LOG_LEVEL", "info").strip(),
         default_timezone=os.getenv("DEFAULT_TIMEZONE", "Europe/Kyiv").strip(),
+        default_reminder_minutes=_parse_int(
+            os.getenv("DEFAULT_REMINDER_MINUTES", "15"),
+            15,
+        ),
         database_path=os.getenv("DATABASE_PATH", "telegram_calendar.sqlite3").strip(),
         allowed_telegram_ids=_parse_allowed_ids(os.getenv("ALLOWED_TELEGRAM_IDS", "")),
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from db.models import EventRecord
 from db.repository import SQLiteRepository
@@ -15,6 +16,7 @@ class EventConfirmationService:
     repository: SQLiteRepository
     timezone_service: TimezoneService
     default_timezone: str
+    default_reminder_minutes: int = 15
     _pending_events: dict[int, ParsedEventDraft] = field(default_factory=dict)
     _pending_deletes: dict[int, int] = field(default_factory=dict)
 
@@ -44,6 +46,9 @@ class EventConfirmationService:
             lines.append("Коли: неповні дані")
 
         lines.append(f"Часовий пояс: {timezone}")
+        lines.append(
+            f"Нагадування: за {self.default_reminder_minutes} хвилин до події"
+        )
         lines.append("")
         lines.append("Надішліть /confirm, щоб зберегти, або /cancel, щоб скасувати.")
 
@@ -83,9 +88,7 @@ class EventConfirmationService:
 
         lines = ["Найближчі події:"]
         for event in events:
-            lines.append(
-                f"{event.id}. {event.title} | {event.event_at} | {event.timezone}"
-            )
+            lines.append(f"{event.id}. {event.title} | {event.event_at} | {event.timezone}")
 
         lines.append("")
         lines.append("Використайте /delete <id>, щоб видалити подію.")
@@ -135,11 +138,25 @@ class EventConfirmationService:
             draft.event_datetime,
             timezone,
         )
-        event = self.repository.create_event(
+        reminder_local = draft.event_datetime - timedelta(
+            minutes=self.default_reminder_minutes
+        )
+        reminder_at_local = self.timezone_service.format_local_isoformat(
+            reminder_local,
+            timezone,
+        )
+        reminder_at_utc = self.timezone_service.to_utc_isoformat(
+            reminder_local,
+            timezone,
+        )
+
+        event, _reminder = self.repository.create_event_with_reminder(
             telegram_id,
             title=draft.title or "Без назви",
             event_at=event_at_local,
             event_at_utc=event_at_utc,
+            reminder_at=reminder_at_local,
+            reminder_at_utc=reminder_at_utc,
             timezone=timezone,
             source_text=draft.source_text,
         )
@@ -167,7 +184,9 @@ class EventConfirmationService:
         return deleted_event
 
     def cancel_pending(self, telegram_id: int) -> bool:
-        existed = telegram_id in self._pending_events or telegram_id in self._pending_deletes
+        existed = (
+            telegram_id in self._pending_events or telegram_id in self._pending_deletes
+        )
         self.clear_pending(telegram_id)
         self.clear_pending_delete(telegram_id)
         return existed

@@ -11,39 +11,27 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from bot.messages import (
-    ADD_BUTTON,
-    CANCEL_BUTTON,
-    CONFIRM_BUTTON,
-    DELETE_BUTTON,
-    HELP_BUTTON,
-    LIST_BUTTON,
-    START_BUTTON,
-    TIMEZONE_BUTTON,
-    WHOAMI_BUTTON,
-    help_text,
-    start_text,
-)
+from bot.messages import ADD_BUTTON, DELETE_BUTTON, LIST_BUTTON, help_text, start_text
 
 
 class BotMessagesTest(unittest.TestCase):
-    def test_start_text_mentions_bot_is_running(self) -> None:
+    def test_start_text_mentions_start_button(self) -> None:
         text = start_text()
 
-        self.assertIn("Бот Telegram Calendar Bot запущено.", text)
+        self.assertIn("Ласкаво просимо", text)
+        self.assertIn("Старт", text)
 
-    def test_help_text_lists_buttons(self) -> None:
+    def test_help_text_lists_main_menu_and_commands(self) -> None:
         text = help_text()
 
-        self.assertIn(START_BUTTON, text)
         self.assertIn(ADD_BUTTON, text)
-        self.assertIn(HELP_BUTTON, text)
-        self.assertIn(WHOAMI_BUTTON, text)
         self.assertIn(LIST_BUTTON, text)
         self.assertIn(DELETE_BUTTON, text)
-        self.assertIn(TIMEZONE_BUTTON, text)
-        self.assertIn(CONFIRM_BUTTON, text)
-        self.assertIn(CANCEL_BUTTON, text)
+        self.assertIn("/start", text)
+        self.assertIn("/help", text)
+        self.assertIn("/whoami", text)
+        self.assertIn("/timezone", text)
+        self.assertIn("/cancel", text)
 
 
 if __name__ == "__main__":

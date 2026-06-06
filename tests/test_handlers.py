@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import sys
-import types
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 import unittest
+from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
 from db.models import EventRecord
+from db.repository import SQLiteRepository
+from services.event_service import EventService
+from services.timezone_service import TimezoneService
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,8 +21,14 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from bot.messages import START_BUTTON
+from bot.keyboards import (
+    EVENT_CREATE_CONFIRM_CALLBACK,
+    EVENT_DELETE_CONFIRM_CALLBACK_PREFIX,
+    START_BUTTON,
+)
 from bot.handlers import build_router
+from bot.messages import ADD_BUTTON, DELETE_BUTTON, LIST_BUTTON
+from bot.states import EventCreationStates, OnboardingStates
 
 
 class _FakeHandler:
@@ -40,6 +51,7 @@ class _FakeObserver:
 class _FakeRouter:
     def __init__(self):
         self.message = _FakeObserver()
+        self.callback_query = _FakeObserver()
 
 
 class _FakeAccessControl:
@@ -50,76 +62,129 @@ class _FakeAccessControl:
         return telegram_id in self.allowed_ids
 
 
-class _FakeEventConfirmation:
+class _FakeState:
+    def __init__(self, initial_state: str | None = None):
+        self.state = initial_state
+        self.data: dict[str, object] = {}
+        self.set_state_calls: list[object] = []
+        self.cleared = False
+
+    async def set_state(self, state):
+        self.set_state_calls.append(state)
+        self.state = getattr(state, "state", state)
+
+    async def get_state(self):
+        return self.state
+
+    async def clear(self):
+        self.cleared = True
+        self.state = None
+        self.data.clear()
+
+    async def update_data(self, **kwargs):
+        self.data.update(kwargs)
+
+    async def get_data(self):
+        return dict(self.data)
+
+
+@dataclass
+class _OnboardingResult:
+    user: SimpleNamespace
+    timezone: str
+    needs_timezone_selection: bool
+    is_new_user: bool
+
+
+class _FakeOnboardingService:
+    def __init__(self, result: _OnboardingResult):
+        self.result = result
+        self.start_calls: list[object] = []
+        self.set_timezone_calls: list[tuple[int, str]] = []
+
+    def start(self, telegram_user):
+        self.start_calls.append(telegram_user)
+        return self.result
+
+    def set_timezone(self, telegram_id, timezone):
+        self.set_timezone_calls.append((telegram_id, timezone))
+        return SimpleNamespace(telegram_id=telegram_id, timezone=timezone)
+
+
+class _FakeEventService:
     def __init__(self):
-        self.preview_calls: list[tuple[int, object]] = []
-        self.confirm_calls: list[int] = []
-        self.cancel_calls: list[int] = []
-        self.delete_request_calls: list[tuple[int, int]] = []
-        self.delete_confirm_calls: list[int] = []
-        self.pending_events: set[int] = set()
-        self.pending_deletes: dict[int, int] = {}
-        self.next_confirm_event = EventRecord(
-            id=1,
-            user_id=111,
-            title="Team sync",
-            event_at="2026-06-07T15:00:00+03:00",
-            event_at_utc="2026-06-07T12:00:00+00:00",
+        self.future_text = "Майбутні події"
+        self.created_events: list[tuple[int, str, str, str]] = []
+        self.deleted_events: list[tuple[int, int]] = []
+        self.events_for_delete = [
+            EventRecord(
+                id=1,
+                user_id=111,
+                title="Зустріч",
+                event_at="2026-06-15T18:00:00+03:00",
+                event_at_utc="2026-06-15T15:00:00+00:00",
+                timezone="Europe/Kyiv",
+                source_text=None,
+                created_at="2026-06-01 10:00:00",
+                updated_at="2026-06-01 10:00:00",
+            )
+        ]
+        self.repository = SimpleNamespace(
+            get_event_for_user=self._get_event_for_user,
+        )
+
+    def _get_event_for_user(self, telegram_id, event_id):
+        for event in self.events_for_delete:
+            if event.id == event_id:
+                return event
+        return None
+
+    def parse_date(self, raw_value):
+        return __import__("datetime").date(2026, 6, 15)
+
+    def parse_time(self, raw_value):
+        return __import__("datetime").time(18, 0)
+
+    def build_preview_text(self, *, title, event_date, event_time, timezone):
+        return (
+            f"Подія:\n{title}\n\n"
+            f"Дата: {event_date.strftime('%d.%m.%Y')}\n"
+            f"Час: {event_time.strftime('%H:%M')}\n"
+            f"Часовий пояс: {timezone}\n\n"
+            "Створити подію?"
+        )
+
+    def build_created_text(self, event):
+        return f"✅ Подію створено.\n\nПодія: {event.title}"
+
+    def build_future_events_text(self, telegram_id):
+        return self.future_text
+
+    def get_events_for_deletion(self, telegram_id):
+        return list(self.events_for_delete)
+
+    def format_event_local_text(self, event_at):
+        return "15.06.2026 18:00"
+
+    def create_event(self, telegram_id, *, title, event_date, event_time):
+        self.created_events.append((telegram_id, title, event_date.isoformat(), event_time.isoformat()))
+        return EventRecord(
+            id=99,
+            user_id=telegram_id,
+            title=title,
+            event_at="2026-06-15T18:00:00+03:00",
+            event_at_utc="2026-06-15T15:00:00+00:00",
             timezone="Europe/Kyiv",
-            source_text="завтра о 15:00 зустріч",
-            created_at="2026-06-06 10:00:00",
-            updated_at="2026-06-06 10:00:00",
+            source_text=None,
+            created_at="2026-06-01 10:00:00",
+            updated_at="2026-06-01 10:00:00",
         )
-        self.events_list_text = (
-            "Найближчі події:\n1. Team sync | 2026-06-07T15:00:00+03:00 | Europe/Kyiv"
-        )
-        self.delete_preview_text = (
-            "Видалити цю подію?\n\n"
-            "ID: 1\n"
-            "Назва: Team sync\n"
-            "Коли: 2026-06-07T15:00:00+03:00\n"
-            "Часовий пояс: Europe/Kyiv\n\n"
-            "Надішліть /confirm, щоб видалити, або /cancel, щоб скасувати."
-        )
-        self.preview_text = "preview text"
-        self.cancel_result = True
 
-    def preview_or_clarify(self, telegram_id, draft):
-        self.preview_calls.append((telegram_id, draft))
-        self.pending_events.add(telegram_id)
-        return self.preview_text
-
-    def confirm_pending(self, telegram_id):
-        self.confirm_calls.append(telegram_id)
-        self.pending_events.discard(telegram_id)
-        return self.next_confirm_event
-
-    def cancel_pending(self, telegram_id):
-        self.cancel_calls.append(telegram_id)
-        self.pending_events.discard(telegram_id)
-        self.pending_deletes.pop(telegram_id, None)
-        return self.cancel_result
-
-    def has_pending_event(self, telegram_id):
-        return telegram_id in self.pending_events
-
-    def has_pending_delete(self, telegram_id):
-        return telegram_id in self.pending_deletes
-
-    def build_events_list_text(self, telegram_id):
-        return self.events_list_text
-
-    def request_delete(self, telegram_id, event_id):
-        self.delete_request_calls.append((telegram_id, event_id))
-        self.pending_deletes[telegram_id] = event_id
-        if event_id != self.next_confirm_event.id:
+    def delete_event(self, telegram_id, event_id):
+        self.deleted_events.append((telegram_id, event_id))
+        if event_id != 1:
             return None
-        return self.delete_preview_text
-
-    def confirm_pending_delete(self, telegram_id):
-        self.delete_confirm_calls.append(telegram_id)
-        self.pending_deletes.pop(telegram_id, None)
-        return self.next_confirm_event
+        return self.events_for_delete[0]
 
 
 class _FakeTimezoneService:
@@ -135,404 +200,410 @@ class _FakeTimezoneService:
         if timezone == "Invalid/Zone":
             raise ValueError("Unknown timezone")
         self.current_timezone = timezone
-        return types.SimpleNamespace(timezone=timezone)
+        return SimpleNamespace(timezone=timezone)
 
 
-def _install_fake_aiogram() -> dict[str, types.ModuleType]:
-    aiogram = types.ModuleType("aiogram")
-    aiogram.Router = _FakeRouter
+class _FakeReminderScheduler:
+    def __init__(self):
+        self.scheduled_event_ids: list[int] = []
 
-    filters = types.ModuleType("aiogram.filters")
+    def schedule_event_reminders(self, event_id: int) -> None:
+        self.scheduled_event_ids.append(event_id)
 
-    class Command:
-        def __init__(self, *args, **kwargs):
-            self.args = args
-            self.kwargs = kwargs
 
-    filters.Command = Command
+def _install_fake_aiogram() -> dict[str, ModuleType]:
+    aiogram = ModuleType("aiogram")
 
-    types_module = types.ModuleType("aiogram.types")
+    class Router:
+        def __init__(self):
+            self.message = _FakeObserver()
+            self.callback_query = _FakeObserver()
+
+    aiogram.Router = Router
 
     class Message:
+        pass
+
+    class CallbackQuery:
         pass
 
     class KeyboardButton:
         def __init__(self, text):
             self.text = text
 
+    class InlineKeyboardButton:
+        def __init__(self, text, callback_data):
+            self.text = text
+            self.callback_data = callback_data
+
     class ReplyKeyboardMarkup:
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs
 
-    types_module.Message = Message
-    types_module.KeyboardButton = KeyboardButton
-    types_module.ReplyKeyboardMarkup = ReplyKeyboardMarkup
+    class InlineKeyboardMarkup:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+    aiogram_types = ModuleType("aiogram.types")
+    aiogram_types.Message = Message
+    aiogram_types.CallbackQuery = CallbackQuery
+    aiogram_types.KeyboardButton = KeyboardButton
+    aiogram_types.InlineKeyboardButton = InlineKeyboardButton
+    aiogram_types.ReplyKeyboardMarkup = ReplyKeyboardMarkup
+    aiogram_types.InlineKeyboardMarkup = InlineKeyboardMarkup
+
+    aiogram_filters = ModuleType("aiogram.filters")
+    aiogram_fsm = ModuleType("aiogram.fsm")
+    aiogram_fsm_context = ModuleType("aiogram.fsm.context")
+    aiogram_fsm_context.FSMContext = object
+
+    aiogram.types = aiogram_types
+    aiogram.filters = aiogram_filters
+    aiogram.fsm = aiogram_fsm
+    aiogram_fsm.context = aiogram_fsm_context
 
     return {
         "aiogram": aiogram,
-        "aiogram.filters": filters,
-        "aiogram.types": types_module,
+        "aiogram.filters": aiogram_filters,
+        "aiogram.types": aiogram_types,
+        "aiogram.fsm": aiogram_fsm,
+        "aiogram.fsm.context": aiogram_fsm_context,
     }
 
 
 class BotHandlersTest(unittest.TestCase):
-    def test_build_router_registers_start_and_help_handlers(self) -> None:
+    def test_build_router_registers_message_and_callback_handlers(self) -> None:
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
             router = build_router(
                 _FakeAccessControl({111}),
-                _FakeEventConfirmation(),
+                None,
                 _FakeTimezoneService(),
+                _FakeOnboardingService(
+                    _OnboardingResult(
+                        user=SimpleNamespace(telegram_id=111),
+                        timezone="Europe/Kyiv",
+                        needs_timezone_selection=False,
+                        is_new_user=True,
+                    )
+                ),
+                _FakeEventService(),
             )
 
-        handler_names = [handler.callback.__name__ for handler in router.message.handlers]
+        self.assertEqual([handler.callback.__name__ for handler in router.message.handlers], ["handle_message"])
+        self.assertEqual([handler.callback.__name__ for handler in router.callback_query.handlers], ["handle_callback"])
 
-        self.assertEqual(
-            handler_names,
-            [
-                "handle_start",
-                "handle_help",
-                "handle_whoami",
-                "handle_list",
-                "handle_confirm",
-                "handle_cancel",
-                "handle_timezone",
-                "handle_delete",
-                "handle_text",
-            ],
-        )
-
-    def test_start_handler_answers_with_start_text(self) -> None:
+    def test_start_command_shows_start_screen(self) -> None:
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                _FakeEventConfirmation(),
-                _FakeTimezoneService(),
-            )
-            start_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_start"
-            )
+            router = build_router(_FakeAccessControl({111}), None, _FakeTimezoneService(), None, _FakeEventService())
+            handler = router.message.handlers[0].callback
             message = AsyncMock()
+            message.text = "/start"
             message.from_user.id = 111
+            state = _FakeState()
 
-            with patch("bot.handlers.start_text", return_value="start response"):
-                asyncio.run(start_handler(message))
+            asyncio.run(handler(message, state))
 
         message.answer.assert_awaited_once()
-        self.assertEqual(message.answer.await_args.args[0], "start response")
         keyboard = message.answer.await_args.kwargs["reply_markup"].kwargs["keyboard"]
         self.assertEqual(keyboard[0][0].text, START_BUTTON)
 
-    def test_help_handler_answers_with_help_text(self) -> None:
+    def test_start_button_runs_onboarding_and_shows_main_menu(self) -> None:
+        onboarding_service = _FakeOnboardingService(
+            _OnboardingResult(
+                user=SimpleNamespace(telegram_id=111),
+                timezone="Europe/Kyiv",
+                needs_timezone_selection=False,
+                is_new_user=True,
+            )
+        )
+
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                _FakeEventConfirmation(),
-                _FakeTimezoneService(),
-            )
-            help_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_help"
-            )
-            message = AsyncMock()
-            message.from_user.id = 111
-
-            with patch("bot.handlers.help_text", return_value="help response"):
-                asyncio.run(help_handler(message))
-
-        message.answer.assert_awaited_once_with("help response")
-
-    def test_whoami_handler_shows_telegram_id(self) -> None:
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                _FakeEventConfirmation(),
-                _FakeTimezoneService(),
-            )
-            whoami_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_whoami"
-            )
-            message = AsyncMock()
-            message.from_user.id = 111
-
-            asyncio.run(whoami_handler(message))
-
-        message.answer.assert_awaited_once_with("Ваш Telegram ID: 111.")
-
-    def test_whoami_handler_works_for_unauthorized_user(self) -> None:
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl(set()),
-                _FakeEventConfirmation(),
-                _FakeTimezoneService(),
-            )
-            whoami_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_whoami"
-            )
-            message = AsyncMock()
-            message.from_user.id = 999
-
-            asyncio.run(whoami_handler(message))
-
-        message.answer.assert_awaited_once_with("Ваш Telegram ID: 999.")
-
-    def test_start_button_returns_start_text(self) -> None:
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                _FakeEventConfirmation(),
-                _FakeTimezoneService(),
-            )
-            text_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_text"
-            )
+            router = build_router(_FakeAccessControl({111}), None, _FakeTimezoneService(), onboarding_service, _FakeEventService())
+            handler = router.message.handlers[0].callback
             message = AsyncMock()
             message.text = START_BUTTON
             message.from_user.id = 111
+            state = _FakeState()
 
-            asyncio.run(text_handler(message))
+            asyncio.run(handler(message, state))
 
         message.answer.assert_awaited_once()
-        self.assertIn("Бот Telegram Calendar Bot запущено.", message.answer.await_args.args[0])
-        self.assertIn("reply_markup", message.answer.await_args.kwargs)
+        self.assertIn("Реєстрація завершена", message.answer.await_args.args[0])
+        keyboard = message.answer.await_args.kwargs["reply_markup"].kwargs["keyboard"]
+        self.assertEqual([row[0].text for row in keyboard], [ADD_BUTTON, LIST_BUTTON, DELETE_BUTTON])
 
-    def test_list_handler_shows_events(self) -> None:
-        fake_confirmation = _FakeEventConfirmation()
+    def test_start_button_prompts_timezone_selection_when_needed(self) -> None:
+        onboarding_service = _FakeOnboardingService(
+            _OnboardingResult(
+                user=SimpleNamespace(telegram_id=111),
+                timezone="Europe/Kyiv",
+                needs_timezone_selection=True,
+                is_new_user=True,
+            )
+        )
+
+        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
+            router = build_router(_FakeAccessControl({111}), None, _FakeTimezoneService(), onboarding_service, _FakeEventService())
+            handler = router.message.handlers[0].callback
+            message = AsyncMock()
+            message.text = START_BUTTON
+            message.from_user.id = 111
+            state = _FakeState()
+
+            asyncio.run(handler(message, state))
+
+        self.assertEqual(state.state, OnboardingStates.choosing_timezone.state)
+        keyboard = message.answer.await_args.kwargs["reply_markup"].kwargs["inline_keyboard"]
+        self.assertTrue(any(button.callback_data == "timezone:Europe/Kyiv" for row in keyboard for button in row))
+
+    def test_add_flow_creates_event_after_confirmation(self) -> None:
+        event_service = _FakeEventService()
+        reminder_scheduler = _FakeReminderScheduler()
+        state = _FakeState()
 
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
             router = build_router(
                 _FakeAccessControl({111}),
-                fake_confirmation,
+                None,
                 _FakeTimezoneService(),
+                None,
+                event_service,
+                reminder_scheduler,
             )
-            list_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_list"
-            )
+            handler = router.message.handlers[0].callback
+            callback_handler = router.callback_query.handlers[0].callback
+
             message = AsyncMock()
             message.from_user.id = 111
+            message.text = ADD_BUTTON
+            asyncio.run(handler(message, state))
 
-            asyncio.run(list_handler(message))
+            self.assertEqual(state.state, EventCreationStates.waiting_title.state)
 
-        message.answer.assert_awaited_once_with(fake_confirmation.events_list_text)
+            message.text = "Зустріч"
+            asyncio.run(handler(message, state))
+            self.assertEqual(state.state, EventCreationStates.waiting_date.state)
 
-    def test_delete_handler_requests_confirmation(self) -> None:
-        fake_confirmation = _FakeEventConfirmation()
+            message.text = "15.06.2026"
+            asyncio.run(handler(message, state))
+            self.assertEqual(state.state, EventCreationStates.waiting_time.state)
+
+            message.text = "18:00"
+            asyncio.run(handler(message, state))
+            self.assertEqual(state.state, EventCreationStates.confirming.state)
+            self.assertIn("Створити подію?", message.answer.await_args.args[0])
+
+            callback = AsyncMock()
+            callback.data = EVENT_CREATE_CONFIRM_CALLBACK
+            callback.message = AsyncMock()
+            callback.message.from_user.id = 999
+            callback.from_user.id = 111
+            asyncio.run(callback_handler(callback, state))
+
+        self.assertEqual(event_service.created_events[0][0], 111)
+        self.assertEqual(event_service.created_events[0][1], "Зустріч")
+        self.assertEqual(reminder_scheduler.scheduled_event_ids, [99])
+        self.assertTrue(state.cleared)
+        self.assertIn("Подію створено", callback.message.answer.await_args.args[0])
+
+    def test_list_and_delete_flow_uses_inline_confirmation(self) -> None:
+        event_service = _FakeEventService()
+        state = _FakeState()
 
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                fake_confirmation,
-                _FakeTimezoneService(),
-            )
-            delete_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_delete"
-            )
+            router = build_router(_FakeAccessControl({111}), None, _FakeTimezoneService(), None, event_service)
+            handler = router.message.handlers[0].callback
+            callback_handler = router.callback_query.handlers[0].callback
+
             message = AsyncMock()
-            message.text = "/delete 1"
             message.from_user.id = 111
+            message.text = LIST_BUTTON
+            asyncio.run(handler(message, state))
 
-            asyncio.run(delete_handler(message))
+            message.text = DELETE_BUTTON
+            asyncio.run(handler(message, state))
+            self.assertIn("Оберіть подію для видалення", message.answer.await_args.args[0])
 
-        message.answer.assert_awaited_once_with(fake_confirmation.delete_preview_text)
-        self.assertEqual(fake_confirmation.delete_request_calls, [(111, 1)])
+            callback = AsyncMock()
+            callback.data = "event:delete:1"
+            callback.message = message
+            callback.from_user.id = 111
+            asyncio.run(callback_handler(callback, state))
+            self.assertIn("Ви дійсно хочете видалити подію?", message.answer.await_args.args[0])
 
-    def test_start_handler_denies_unauthorized_user(self) -> None:
+            callback.data = f"{EVENT_DELETE_CONFIRM_CALLBACK_PREFIX}1"
+            asyncio.run(callback_handler(callback, state))
+
+        self.assertEqual(event_service.deleted_events, [(111, 1)])
+        self.assertIn("Подію видалено", message.answer.await_args.args[0])
+
+    def test_timezone_callback_completes_onboarding(self) -> None:
+        onboarding_service = _FakeOnboardingService(
+            _OnboardingResult(
+                user=SimpleNamespace(telegram_id=111),
+                timezone="Europe/Kyiv",
+                needs_timezone_selection=True,
+                is_new_user=True,
+            )
+        )
+        event_service = _FakeEventService()
+        state = _FakeState(OnboardingStates.choosing_timezone.state)
+
         with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl(set()),
-                _FakeEventConfirmation(),
-                _FakeTimezoneService(),
-            )
-            start_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_start"
-            )
+            router = build_router(_FakeAccessControl({111}), None, _FakeTimezoneService(), onboarding_service, event_service)
+            callback_handler = router.callback_query.handlers[0].callback
+
+            callback = AsyncMock()
+            callback.data = "timezone:Europe/Berlin"
+            callback.message = AsyncMock()
+            callback.message.from_user.id = 111
+            callback.from_user.id = 111
+
+            asyncio.run(callback_handler(callback, state))
+
+        self.assertEqual(onboarding_service.set_timezone_calls, [(111, "Europe/Berlin")])
+        self.assertTrue(state.cleared)
+        callback.message.answer.assert_awaited_once()
+
+    def test_whoami_works_without_access_list(self) -> None:
+        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
+            router = build_router(_FakeAccessControl(set()), None, _FakeTimezoneService(), None, _FakeEventService())
+            handler = router.message.handlers[0].callback
             message = AsyncMock()
             message.from_user.id = 999
+            message.text = "/whoami"
+            state = _FakeState()
 
-            asyncio.run(start_handler(message))
+            asyncio.run(handler(message, state))
 
-        message.answer.assert_awaited_once()
-        self.assertIn("Доступ заборонено.", message.answer.await_args.args[0])
+        message.answer.assert_awaited_once_with("Ваш Telegram ID: 999")
 
-    def test_text_handler_previews_event_draft(self) -> None:
-        fake_confirmation = _FakeEventConfirmation()
-        fake_confirmation.preview_text = "preview text"
 
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                fake_confirmation,
-                _FakeTimezoneService(),
+    def test_delete_buttons_reflect_database_events(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+            timezone_service = TimezoneService(
+                repository=repo,
+                default_timezone="Europe/Kyiv",
             )
-            text_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_text"
+            event_service = EventService(
+                repository=repo,
+                timezone_service=timezone_service,
             )
-            message = AsyncMock()
-            message.text = "завтра о 15:00 зустріч"
-            message.from_user.id = 111
 
-            with patch("bot.handlers.parse_event_text") as parse_event_text:
-                parse_event_text.return_value = object()
-                asyncio.run(text_handler(message))
-
-        message.answer.assert_awaited_once_with("preview text")
-        self.assertEqual(fake_confirmation.preview_calls[0][0], 111)
-
-    def test_confirm_handler_creates_event(self) -> None:
-        fake_confirmation = _FakeEventConfirmation()
-
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                fake_confirmation,
-                _FakeTimezoneService(),
+            first_event = repo.create_event(
+                111,
+                title="Сонячна зустріч",
+                event_at="2026-07-01T10:00:00+03:00",
+                event_at_utc="2026-07-01T07:00:00+00:00",
+                timezone="Europe/Kyiv",
             )
-            confirm_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_confirm"
+            second_event = repo.create_event(
+                111,
+                title="Планування",
+                event_at="2026-07-02T11:30:00+03:00",
+                event_at_utc="2026-07-02T08:30:00+00:00",
+                timezone="Europe/Kyiv",
             )
-            message = AsyncMock()
-            message.from_user.id = 111
 
-            asyncio.run(confirm_handler(message))
+            with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
+                router = build_router(
+                    _FakeAccessControl({111}),
+                    None,
+                    timezone_service,
+                    None,
+                    event_service,
+                )
+                handler = router.message.handlers[0].callback
 
-        message.answer.assert_awaited_once()
-        self.assertIn("Подію створено.", message.answer.await_args.args[0])
-        self.assertEqual(fake_confirmation.confirm_calls, [111])
+                message = AsyncMock()
+                message.from_user.id = 111
+                message.text = DELETE_BUTTON
+                state = _FakeState()
 
-    def test_confirm_handler_deletes_event_when_delete_is_pending(self) -> None:
-        fake_confirmation = _FakeEventConfirmation()
-        fake_confirmation.pending_deletes[111] = 1
+                asyncio.run(handler(message, state))
 
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                fake_confirmation,
-                _FakeTimezoneService(),
+            reply_markup = message.answer.await_args.kwargs["reply_markup"]
+            keyboard = reply_markup.kwargs["inline_keyboard"]
+            self.assertEqual(len(keyboard), 2)
+            self.assertEqual(keyboard[0][0].text, f"Видалити: {first_event.title}")
+            self.assertEqual(keyboard[0][0].callback_data, f"event:delete:{first_event.id}")
+            self.assertEqual(keyboard[1][0].text, f"Видалити: {second_event.title}")
+            self.assertEqual(keyboard[1][0].callback_data, f"event:delete:{second_event.id}")
+
+    def test_list_and_delete_buttons_stay_in_sync_after_db_changes(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+            timezone_service = TimezoneService(
+                repository=repo,
+                default_timezone="Europe/Kyiv",
             )
-            confirm_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_confirm"
+            event_service = EventService(
+                repository=repo,
+                timezone_service=timezone_service,
             )
-            message = AsyncMock()
-            message.from_user.id = 111
 
-            asyncio.run(confirm_handler(message))
-
-        message.answer.assert_awaited_once()
-        self.assertIn("Подію видалено.", message.answer.await_args.args[0])
-        self.assertEqual(fake_confirmation.delete_confirm_calls, [111])
-
-    def test_cancel_handler_discards_event(self) -> None:
-        fake_confirmation = _FakeEventConfirmation()
-        fake_confirmation.pending_events.add(111)
-
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                fake_confirmation,
-                _FakeTimezoneService(),
+            first_event = repo.create_event(
+                111,
+                title="Зустріч з колегами",
+                event_at="2026-07-01T10:00:00+03:00",
+                event_at_utc="2026-07-01T07:00:00+00:00",
+                timezone="Europe/Kyiv",
             )
-            cancel_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_cancel"
+            second_event = repo.create_event(
+                111,
+                title="Візов",
+                event_at="2026-07-02T11:30:00+03:00",
+                event_at_utc="2026-07-02T08:30:00+00:00",
+                timezone="Europe/Kyiv",
             )
-            message = AsyncMock()
-            message.from_user.id = 111
 
-            asyncio.run(cancel_handler(message))
+            with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
+                router = build_router(
+                    _FakeAccessControl({111}),
+                    None,
+                    timezone_service,
+                    None,
+                    event_service,
+                )
+                handler = router.message.handlers[0].callback
+                callback_handler = router.callback_query.handlers[0].callback
+                state = _FakeState()
 
-        message.answer.assert_awaited_once_with("Чернетку події скасовано.")
-        self.assertEqual(fake_confirmation.cancel_calls, [111])
+                list_message = AsyncMock()
+                list_message.from_user.id = 111
+                list_message.text = LIST_BUTTON
+                asyncio.run(handler(list_message, state))
+                self.assertIn(first_event.title, list_message.answer.await_args.args[0])
+                self.assertIn(second_event.title, list_message.answer.await_args.args[0])
 
-    def test_cancel_handler_discards_delete_request(self) -> None:
-        fake_confirmation = _FakeEventConfirmation()
-        fake_confirmation.pending_deletes[111] = 1
+                delete_message = AsyncMock()
+                delete_message.from_user.id = 111
+                delete_message.text = DELETE_BUTTON
+                asyncio.run(handler(delete_message, state))
 
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                fake_confirmation,
-                _FakeTimezoneService(),
-            )
-            cancel_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_cancel"
-            )
-            message = AsyncMock()
-            message.from_user.id = 111
+                callback = AsyncMock()
+                callback.data = f"event:delete:{first_event.id}"
+                callback.message = delete_message
+                callback.from_user.id = 111
+                asyncio.run(callback_handler(callback, state))
 
-            asyncio.run(cancel_handler(message))
+                callback.data = f"{EVENT_DELETE_CONFIRM_CALLBACK_PREFIX}{first_event.id}"
+                asyncio.run(callback_handler(callback, state))
 
-        message.answer.assert_awaited_once_with("Запит на видалення скасовано.")
-        self.assertEqual(fake_confirmation.cancel_calls, [111])
+                refreshed_list_message = AsyncMock()
+                refreshed_list_message.from_user.id = 111
+                refreshed_list_message.text = LIST_BUTTON
+                asyncio.run(handler(refreshed_list_message, state))
 
-    def test_timezone_handler_shows_current_timezone(self) -> None:
-        fake_timezone = _FakeTimezoneService("Europe/Warsaw")
-
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                _FakeEventConfirmation(),
-                fake_timezone,
-            )
-            timezone_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_timezone"
-            )
-            message = AsyncMock()
-            message.text = "/timezone"
-            message.from_user.id = 111
-
-            asyncio.run(timezone_handler(message))
-
-        message.answer.assert_awaited_once()
-        self.assertIn("Europe/Warsaw", message.answer.await_args.args[0])
-
-    def test_timezone_handler_updates_timezone(self) -> None:
-        fake_timezone = _FakeTimezoneService("Europe/Kyiv")
-
-        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
-            router = build_router(
-                _FakeAccessControl({111}),
-                _FakeEventConfirmation(),
-                fake_timezone,
-            )
-            timezone_handler = next(
-                handler.callback
-                for handler in router.message.handlers
-                if handler.callback.__name__ == "handle_timezone"
-            )
-            message = AsyncMock()
-            message.text = "/timezone Europe/Berlin"
-            message.from_user.id = 111
-
-            asyncio.run(timezone_handler(message))
-
-        message.answer.assert_awaited_once_with("Часовий пояс оновлено: Europe/Berlin.")
-        self.assertEqual(fake_timezone.set_calls, [(111, "Europe/Berlin")])
+            refreshed_text = refreshed_list_message.answer.await_args.args[0]
+            self.assertNotIn(first_event.title, refreshed_text)
+            self.assertIn(second_event.title, refreshed_text)
+            self.assertEqual(repo.list_events_for_user(111), [second_event])
 
 
 if __name__ == "__main__":

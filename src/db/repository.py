@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 from typing import Iterator
@@ -96,6 +97,44 @@ class SQLiteRepository:
             row = connection.execute(
                 "SELECT * FROM users WHERE id = ?",
                 (cursor.lastrowid,),
+            ).fetchone()
+        return _row_to_dataclass(UserRecord, row)
+
+    def upsert_user_profile(
+        self,
+        telegram_id: int,
+        *,
+        username: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        timezone_name: str | None = None,
+    ) -> UserRecord:
+        existing_user = self.get_user_by_telegram_id(telegram_id)
+        if existing_user is None:
+            return self.get_or_create_user(
+                telegram_id,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+                timezone=timezone_name or "Europe/Kyiv",
+            )
+
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE users
+                SET username = COALESCE(?, username),
+                    first_name = COALESCE(?, first_name),
+                    last_name = COALESCE(?, last_name),
+                    timezone = COALESCE(?, timezone),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE telegram_id = ?
+                """,
+                (username, first_name, last_name, timezone_name, telegram_id),
+            )
+            row = connection.execute(
+                "SELECT * FROM users WHERE telegram_id = ?",
+                (telegram_id,),
             ).fetchone()
         return _row_to_dataclass(UserRecord, row)
 
@@ -402,6 +441,25 @@ class SQLiteRepository:
                 ORDER BY events.event_at ASC, events.id ASC
                 """,
                 (telegram_id,),
+            ).fetchall()
+        return [
+            _row_to_dataclass(EventRecord, row)
+            for row in rows
+        ]
+
+    def list_future_events_for_user(self, telegram_id: int) -> list[EventRecord]:
+        now_utc = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT events.*
+                FROM events
+                JOIN users ON users.id = events.user_id
+                WHERE users.telegram_id = ?
+                  AND datetime(events.event_at_utc) >= datetime(?)
+                ORDER BY datetime(events.event_at_utc) ASC, events.id ASC
+                """,
+                (telegram_id, now_utc),
             ).fetchall()
         return [
             _row_to_dataclass(EventRecord, row)

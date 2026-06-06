@@ -18,8 +18,8 @@ AI має відповідати українською мовою за замо
 Project name: Telegram Calendar Bot
 Current phase: MVP implementation
 Current goal: Побудувати Telegram-бота для створення подій і локальних нагадувань з текстових повідомлень.
-Current task: Продовжити після timezone-aware event storage, не змінюючи напрям без підтвердження користувача.
-Last updated: 2026-06-06
+Current task: Після завершення onboarding/menu/FSM/list/delete/scheduler перейти до наступного підтвердженого MVP-кроку.
+Last updated: 2026-06-07
 ```
 
 ## What Has Been Done
@@ -31,7 +31,13 @@ Last updated: 2026-06-06
 - Додано confirmation flow для чернетки події перед збереженням.
 - Додано groundwork для timezone service.
 - Додано timezone-aware event storage.
-- Наявні тести для access control, bot messages, event confirmation, handlers, parsing, repository, settings і timezone service.
+- Додано onboarding зі стартовою кнопкою, автоматичним allow list і створенням профілю користувача.
+- Додано головне меню на ReplyKeyboard і inline-кнопки для підтвердження/видалення.
+- Додано FSM flow створення події: назва -> дата -> час -> підтвердження.
+- Додано список майбутніх подій і видалення події після підтвердження.
+- Додано локальний scheduler reminders через APScheduler: відновлення pending reminders при старті та планування reminders після створення нової події.
+- Для кожної нової події створюються два нагадування: за 15 хвилин до події та рівно в час події.
+- Наявні тести для access control, bot messages, onboarding, event confirmation, handlers, parsing, repository, reminder scheduler, settings і timezone service.
 ```
 
 ## Important Decisions
@@ -65,8 +71,12 @@ Last updated: 2026-06-06
   Why: Потрібно зберігати локальний час, UTC час і timezone для подій.
 
 - File: tests/*
-  What changed: Додано/оновлено тести для поточних MVP-компонентів.
-  Why: Захистити поведінку парсингу, storage, handlers, settings і timezone logic.
+  What changed: Додано/оновлено тести для поточних MVP-компонентів; останній запуск `python -m unittest discover -s tests -q` пройшов.
+  Why: Захистити поведінку onboarding, меню, FSM creation, list/delete, scheduler, storage, handlers, settings і timezone logic.
+
+- File: src/bot/app.py, src/bot/handlers.py, src/bot/keyboards.py, src/bot/states.py, src/services/event_service.py, src/services/onboarding_service.py, src/scheduler/reminder_scheduler.py
+  What changed: Додано onboarding, keyboard UX, FSM creation, list/delete і scheduler wiring; виправлено confirm callback user id; додано другий reminder на час події.
+  Why: Завершити текстовий вертикальний сценарій до локальних reminders.
 ```
 
 ## Current Architecture / Direction
@@ -80,21 +90,26 @@ MVP - один Python-сервіс Telegram-бота.
 - Parsing Layer: розбір текстових подій.
 - Service Layer: confirmation flow, timezone service.
 - Storage Layer: SQLite repository/schema/models.
-- Future Scheduler Layer: локальні reminders через APScheduler.
+- Scheduler Layer: локальні reminders через APScheduler.
 
-Поточний напрям: завершити вертикальний сценарій текстова подія -> confirmation -> SQLite storage -> список/видалення -> reminders.
+Поточний напрям: стабілізувати текстовий MVP, перевірити локальний запуск бота і після підтвердження перейти до voice/Whisper або cleanup/documentation.
 ```
 
 ## Current MVP Scope
 
 ```text
 - Telegram bot через aiogram.
-- Команди /start, /help, /timezone, /confirm, /cancel.
+- Команди /start, /help, /timezone, /confirm, /cancel, /list, /delete.
+- Onboarding зі стартовою кнопкою, автоматичним allow list і профілем користувача.
+- Головне меню з кнопками Додати подію, Список подій, Видалити подію.
 - Прийом текстових повідомлень з описом події.
 - Парсинг дати, часу й назви події.
 - Confirmation preview перед збереженням.
 - SQLite persistence.
 - Timezone-aware event storage.
+- Список майбутніх подій.
+- Видалення подій після підтвердження.
+- Локальні reminders через APScheduler: за 15 хвилин до події та в час події.
 - Access control allow list.
 - Базові тести.
 ```
@@ -103,9 +118,6 @@ MVP - один Python-сервіс Telegram-бота.
 
 ```text
 - Голосові повідомлення і Whisper transcription.
-- Список майбутніх подій.
-- Видалення подій.
-- Scheduler/reminders.
 - Google Calendar integration.
 - Повторювані події.
 - Premium/free limits і монетизація.
@@ -115,10 +127,10 @@ MVP - один Python-сервіс Telegram-бота.
 ## Open Questions
 
 ```text
-- Який наступний MVP-крок підтвердити: list/delete events чи scheduler reminders?
+- Який наступний MVP-крок підтвердити: voice/Whisper transcription чи cleanup/documentation/local run verification?
 - Чи потрібна команда /add, якщо бот уже приймає звичайний текст?
-- Який формат UX для списку і видалення подій: команди з id чи inline buttons?
-- Коли додавати voice/Whisper: до reminders чи після стабілізації текстового сценарію?
+- Чи потрібно додати явну команду /add поряд із кнопкою Додати подію?
+- Чи потрібно після підтвердження події показувати коротший/інший summary для користувача?
 ```
 
 ## Known Risks
@@ -128,9 +140,9 @@ MVP - один Python-сервіс Telegram-бота.
   Impact: Нагадування може прийти не в той час.
   Next action: Додати edge-case тести для timezone conversion.
 
-- Risk: Scheduler ще не реалізований.
-  Impact: Події можуть зберігатися, але не нагадувати користувачу.
-  Next action: Спланувати окрему TASK для APScheduler і recovery after restart.
+- Risk: Scheduler реалізований, але не перевірений на реальному Telegram bot runtime у цій сесії.
+  Impact: Unit-тести проходять, але інтеграційні проблеми запуску/доставки можуть проявитися лише локально з реальним токеном.
+  Next action: Виконати local run verification з валідним `.env` і тестовою подією.
 
 - Risk: Voice/Whisper може ускладнити MVP.
   Impact: Витрати, latency і залежність від зовнішнього API або локальної моделі.
@@ -140,23 +152,23 @@ MVP - один Python-сервіс Telegram-бота.
 ## Tests / Validation
 
 ```text
-Last tests run: Unknown in current session.
-Result: Not verified in current session.
+Last tests run: 2026-06-07, `python -m unittest discover -s tests -q`.
+Result: 44 tests, OK.
 Known test gaps:
-- Scheduler/reminders tests ще неактуальні, бо функція не реалізована.
-- Потрібні edge-case тести для timezone і DST.
-- Потрібні тести для list/delete events після реалізації.
+- `pytest` не встановлений у поточному Python, тому перевірка виконувалась через unittest.
+- Потрібні додаткові edge-case тести для timezone і DST.
+- Потрібна інтеграційна перевірка реального Telegram runtime і доставки reminders.
 ```
 
 ## Next Recommended Step
 
 ```text
 Перед кодом підтвердити наступну гілку реалізації:
-1. List/delete events.
-2. Scheduler/reminders.
-3. Voice/Whisper transcription.
+1. Local run verification і cleanup/documentation.
+2. Voice/Whisper transcription.
+3. Додаткові timezone/DST edge-case tests.
 
-Рекомендація: спочатку list/delete events, потім scheduler/reminders, voice/Whisper залишити після стабілізації текстового MVP.
+Рекомендація: спочатку local run verification і cleanup/documentation, потім voice/Whisper.
 ```
 
 ## End-of-Session Update Checklist

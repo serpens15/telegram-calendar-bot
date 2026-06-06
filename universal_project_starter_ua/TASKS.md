@@ -226,7 +226,7 @@ Test Scenarios:
 - Negative: неправильна дата або час відхиляються.
 - Edge: cancel скидає незавершену чернетку.
 
-Status: Not started
+Status: Done
 
 ### TASK-016: Event Listing and Deletion Flow
 
@@ -273,7 +273,7 @@ Test Scenarios:
 - Negative: неіснуюча подія не видаляється.
 - Edge: порожній список показує дружнє повідомлення.
 
-Status: Not started
+Status: Done
 
 ### TASK-017: Timezone Resolution and Manual Selection
 
@@ -319,7 +319,7 @@ Test Scenarios:
 - Negative: невідомий timezone відхиляється.
 - Edge: повторна реєстрація не губить існуючий timezone.
 
-Status: Not started
+Status: Done
 
 ### TASK-002: Bot Skeleton
 
@@ -634,7 +634,8 @@ TASK-007
 
 Acceptance Criteria:
 
-- [ ] Нагадування планується при створенні події.
+- [ ] Нагадування за 15 хвилин до події планується при створенні події.
+- [ ] Нагадування в час події планується при створенні події.
 - [ ] Бот надсилає нагадування у потрібний час.
 - [ ] Після рестарту активні нагадування відновлюються з БД.
 
@@ -650,7 +651,7 @@ Test Scenarios:
 - Negative: недоступний Telegram API логуватиметься.
 - Edge: перезапуск не втрачає заплановані події.
 
-Status: Not started
+Status: Done
 
 ### TASK-010: List and Delete Commands
 
@@ -692,7 +693,7 @@ Test Scenarios:
 - Negative: відсутні події обробляються без помилки.
 - Edge: багато подій не ламають форматування.
 
-Status: Not started
+Status: Done
 
 ### TASK-011: Timezone Handling
 
@@ -735,7 +736,7 @@ Test Scenarios:
 - Negative: невідомий timezone відхиляється.
 - Edge: DST переходи не ламають збереження часу.
 
-Status: Not started
+Status: Done
 
 ### TASK-012: Testing and Documentation
 

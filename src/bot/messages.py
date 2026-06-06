@@ -1,14 +1,14 @@
-"""Static bot responses."""
+"""Static bot messages and button labels."""
 
 from __future__ import annotations
 
 
 START_BUTTON = "Старт"
-ADD_BUTTON = "Додати подію"
-HELP_BUTTON = "Довідка"
-WHOAMI_BUTTON = "Мій ID"
+ADD_BUTTON = "➕ Додати подію"
 LIST_BUTTON = "Список подій"
 DELETE_BUTTON = "Видалити подію"
+HELP_BUTTON = "Довідка"
+WHOAMI_BUTTON = "Мій ID"
 TIMEZONE_BUTTON = "Часовий пояс"
 CONFIRM_BUTTON = "Підтвердити"
 CANCEL_BUTTON = "Скасувати"
@@ -16,48 +16,39 @@ CANCEL_BUTTON = "Скасувати"
 
 def start_text() -> str:
     return (
-        "Бот Telegram Calendar Bot запущено.\n\n"
-        "Надішліть текст події, а кнопки нижче допоможуть швидко відкрити список, "
-        "перевірити часовий пояс або підтвердити дію."
+        "Ласкаво просимо до Telegram Calendar Bot.\n\n"
+        "Натисніть кнопку Старт, щоб зареєструватися та відкрити головне меню."
+    )
+
+
+def registration_completed_text(telegram_id: int, timezone: str) -> str:
+    return (
+        "✅ Реєстрація завершена\n\n"
+        f"Ваш ID: {telegram_id}\n\n"
+        f"Часовий пояс: {timezone}"
+    )
+
+
+def timezone_selection_text() -> str:
+    return (
+        "Не вдалося автоматично визначити ваш часовий пояс.\n\n"
+        "Оберіть його вручну зі списку нижче."
     )
 
 
 def help_text() -> str:
     return (
-        "Доступні дії:\n"
-        f"{START_BUTTON} - повернутися на головний екран\n"
-        f"{ADD_BUTTON} - почати додавання події\n"
-        f"{HELP_BUTTON} - показати довідку\n"
-        f"{WHOAMI_BUTTON} - показати ваш Telegram ID\n"
-        f"{LIST_BUTTON} - показати найближчі події\n"
-        f"{DELETE_BUTTON} - почати видалення події\n"
-        f"{TIMEZONE_BUTTON} - показати або змінити часовий пояс\n"
-        f"{CONFIRM_BUTTON} - зберегти або підтвердити дію\n"
-        f"{CANCEL_BUTTON} - скасувати поточну чернетку"
+        "Доступні команди:\n"
+        "/start - показати стартовий екран\n"
+        "/help - показати довідку\n"
+        "/whoami - показати ваш Telegram ID\n"
+        "/timezone - переглянути або змінити часовий пояс\n"
+        "/list - показати майбутні події\n"
+        "/delete - почати видалення події\n"
+        "/cancel - скасувати поточну дію\n\n"
+        "Основне меню після реєстрації:\n"
+        f"{ADD_BUTTON}\n"
+        f"{LIST_BUTTON}\n"
+        f"{DELETE_BUTTON}"
     )
 
-
-def main_menu_keyboard():
-    from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
-
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text=START_BUTTON),
-                KeyboardButton(text=ADD_BUTTON),
-                KeyboardButton(text=LIST_BUTTON),
-            ],
-            [
-                KeyboardButton(text=WHOAMI_BUTTON),
-                KeyboardButton(text=DELETE_BUTTON),
-                KeyboardButton(text=TIMEZONE_BUTTON),
-            ],
-            [
-                KeyboardButton(text=HELP_BUTTON),
-                KeyboardButton(text=CONFIRM_BUTTON),
-                KeyboardButton(text=CANCEL_BUTTON),
-            ],
-        ],
-        resize_keyboard=True,
-        is_persistent=True,
-    )

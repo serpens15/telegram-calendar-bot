@@ -16,6 +16,9 @@ class AccessControlService:
         for telegram_id in self.allowed_telegram_ids:
             self.repository.allow_user(telegram_id)
 
+    def allow_user(self, telegram_id: int) -> None:
+        self.repository.allow_user(telegram_id)
+
     def is_allowed(self, telegram_id: int | None) -> bool:
         if telegram_id is None:
             return False

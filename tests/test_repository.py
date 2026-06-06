@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 import unittest
 from tempfile import TemporaryDirectory
@@ -40,20 +41,35 @@ class SQLiteRepositoryTest(unittest.TestCase):
             self.assertTrue({"users", "allowed_users", "events", "reminders"}.issubset(table_names))
             self.assertIn("timezone", user_columns)
 
-    def test_user_timezone_and_allow_list_persist(self) -> None:
+    def test_user_timezone_allow_list_and_profile_upsert_persist(self) -> None:
         with TemporaryDirectory() as temp_dir:
             repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
             repo.initialize()
 
             allowed = repo.allow_user(111)
-            user = repo.get_or_create_user(111, username="alice", timezone="Europe/Warsaw")
-            updated = repo.update_user_timezone(111, "Europe/Kyiv")
+            created = repo.upsert_user_profile(
+                111,
+                username="alice",
+                first_name="Alice",
+                last_name="Smith",
+                timezone_name="Europe/Warsaw",
+            )
+            updated = repo.upsert_user_profile(
+                111,
+                username="alice2",
+                first_name="Alicia",
+                timezone_name="Europe/Kyiv",
+            )
+            timezone_user = repo.update_user_timezone(111, "Europe/Berlin")
 
             self.assertEqual(allowed.telegram_id, 111)
             self.assertTrue(repo.is_user_allowed(111))
-            self.assertEqual(user.telegram_id, 111)
-            self.assertEqual(user.timezone, "Europe/Warsaw")
+            self.assertEqual(created.telegram_id, 111)
+            self.assertEqual(updated.username, "alice2")
+            self.assertEqual(updated.first_name, "Alicia")
+            self.assertEqual(updated.last_name, "Smith")
             self.assertEqual(updated.timezone, "Europe/Kyiv")
+            self.assertEqual(timezone_user.timezone, "Europe/Berlin")
 
     def test_events_and_reminders_are_stored(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -98,9 +114,37 @@ class SQLiteRepositoryTest(unittest.TestCase):
             self.assertEqual(user_events[0].id, event.id)
             self.assertEqual(len(event_reminders), 2)
             self.assertEqual({item.id for item in event_reminders}, {reminder_from_event.id, reminder.id})
-            pending_reminders = repo.list_pending_reminders()
+            self.assertEqual(len(repo.list_pending_reminders()), 2)
 
-            self.assertEqual(len(pending_reminders), 2)
+    def test_list_future_events_for_user_filters_past_events(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+
+            now = datetime.now(timezone.utc).replace(microsecond=0)
+            past_iso = now.replace(year=now.year - 1).isoformat()
+            future_iso = now.replace(year=now.year + 1).isoformat()
+
+            past_event = repo.create_event(
+                444,
+                title="Past",
+                event_at=past_iso,
+                event_at_utc=past_iso,
+                timezone="UTC",
+            )
+            future_event = repo.create_event(
+                444,
+                title="Future",
+                event_at=future_iso,
+                event_at_utc=future_iso,
+                timezone="UTC",
+            )
+
+            future_events = repo.list_future_events_for_user(444)
+            future_ids = [event.id for event in future_events]
+
+            self.assertNotIn(past_event.id, future_ids)
+            self.assertIn(future_event.id, future_ids)
 
     def test_delete_event_for_user_removes_matching_event_only(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -9,7 +9,9 @@ from config.settings import load_settings
 from db.repository import SQLiteRepository
 from scheduler.reminder_scheduler import ReminderSchedulerService
 from security.access_control import AccessControlService
+from services.event_service import EventService
 from services.event_confirmation import EventConfirmationService
+from services.onboarding_service import OnboardingService
 from services.timezone_service import TimezoneService
 
 from .handlers import build_router
@@ -25,6 +27,7 @@ def _configure_logging(level_name: str) -> None:
 
 async def run_bot() -> None:
     from aiogram import Bot, Dispatcher
+    from aiogram.fsm.storage.memory import MemoryStorage
 
     settings = load_settings()
     _configure_logging(settings.log_level)
@@ -42,6 +45,16 @@ async def run_bot() -> None:
         repository=repository,
         default_timezone=settings.default_timezone,
     )
+    onboarding_service = OnboardingService(
+        repository=repository,
+        timezone_service=timezone_service,
+        default_timezone=settings.default_timezone,
+    )
+    event_service = EventService(
+        repository=repository,
+        timezone_service=timezone_service,
+        default_reminder_minutes=settings.default_reminder_minutes,
+    )
 
     bot = Bot(token=settings.telegram_bot_token)
     reminder_scheduler = ReminderSchedulerService(
@@ -57,12 +70,14 @@ async def run_bot() -> None:
         default_reminder_minutes=settings.default_reminder_minutes,
     )
 
-    dispatcher = Dispatcher()
+    dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(
         build_router(
             access_control,
             event_confirmation,
             timezone_service,
+            onboarding_service,
+            event_service,
             reminder_scheduler,
         )
     )

@@ -16,6 +16,7 @@ if str(SRC) not in sys.path:
 from db.repository import SQLiteRepository
 from parsing.models import ParsedEventDraft
 from services.event_confirmation import EventConfirmationService
+from services.timezone_service import TimezoneService
 
 
 class EventConfirmationServiceTest(unittest.TestCase):
@@ -35,6 +36,10 @@ class EventConfirmationServiceTest(unittest.TestCase):
             repo.initialize()
             service = EventConfirmationService(
                 repository=repo,
+                timezone_service=TimezoneService(
+                    repository=repo,
+                    default_timezone="Europe/Kyiv",
+                ),
                 default_timezone="Europe/Kyiv",
             )
 
@@ -44,6 +49,7 @@ class EventConfirmationServiceTest(unittest.TestCase):
             self.assertIn("Preview:", preview)
             self.assertIn("Title: зустріч", preview)
             self.assertIn("Timezone: Europe/Kyiv", preview)
+            self.assertIn("UTC:", preview)
             self.assertIs(service.get_pending(111), draft)
 
     def test_confirm_creates_event_and_clears_pending(self) -> None:
@@ -52,6 +58,10 @@ class EventConfirmationServiceTest(unittest.TestCase):
             repo.initialize()
             service = EventConfirmationService(
                 repository=repo,
+                timezone_service=TimezoneService(
+                    repository=repo,
+                    default_timezone="Europe/Kyiv",
+                ),
                 default_timezone="Europe/Kyiv",
             )
             draft = self._complete_draft()
@@ -61,7 +71,8 @@ class EventConfirmationServiceTest(unittest.TestCase):
 
             self.assertIsNotNone(event)
             self.assertEqual(event.title, "зустріч")
-            self.assertEqual(event.event_at, "2026-06-07T15:00:00")
+            self.assertEqual(event.event_at, "2026-06-07T15:00:00+03:00")
+            self.assertEqual(event.event_at_utc, "2026-06-07T12:00:00+00:00")
             self.assertEqual(service.get_pending(111), None)
             self.assertEqual(repo.list_events_for_user(111)[0].id, event.id)
 
@@ -71,6 +82,10 @@ class EventConfirmationServiceTest(unittest.TestCase):
             repo.initialize()
             service = EventConfirmationService(
                 repository=repo,
+                timezone_service=TimezoneService(
+                    repository=repo,
+                    default_timezone="Europe/Kyiv",
+                ),
                 default_timezone="Europe/Kyiv",
             )
             service.set_pending(111, self._complete_draft())

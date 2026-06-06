@@ -19,6 +19,9 @@ SQLite storage is created automatically at the path in `DATABASE_PATH`.
 ```text
 /start - show the bot intro
 /help - show the available commands
+/timezone - show or change your timezone
+/confirm - save the pending event draft
+/cancel - discard the pending event draft
 ```
 
 ## Project Structure

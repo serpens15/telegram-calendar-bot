@@ -38,6 +38,7 @@ async def run_bot() -> None:
 
     event_confirmation = EventConfirmationService(
         repository=repository,
+        timezone_service=timezone_service,
         default_timezone=settings.default_timezone,
     )
     timezone_service = TimezoneService(

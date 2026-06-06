@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from pathlib import Path
 import unittest
 from tempfile import TemporaryDirectory
@@ -48,6 +49,17 @@ class TimezoneServiceTest(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 service.validate_timezone("Invalid/Zone")
+
+    def test_to_utc_datetime_converts_local_time(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repository.initialize()
+            service = TimezoneService(repository=repository, default_timezone="Europe/Kyiv")
+
+            local_time = datetime(2026, 6, 7, 15, 0)
+            utc_time = service.to_utc_datetime(local_time, "Europe/Kyiv")
+
+        self.assertEqual(utc_time.isoformat(), "2026-06-07T12:00:00+00:00")
 
 
 if __name__ == "__main__":

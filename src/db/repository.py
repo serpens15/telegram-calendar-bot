@@ -37,6 +37,26 @@ class SQLiteRepository:
     def initialize(self) -> None:
         with self.connect() as connection:
             connection.executescript(SCHEMA_SQL)
+            self._apply_migrations(connection)
+
+    def _apply_migrations(self, connection: sqlite3.Connection) -> None:
+        self._add_column_if_missing(connection, "events", "event_at_utc", "TEXT")
+        self._add_column_if_missing(connection, "reminders", "reminder_at_utc", "TEXT")
+
+    def _add_column_if_missing(
+        self,
+        connection: sqlite3.Connection,
+        table_name: str,
+        column_name: str,
+        column_type: str,
+    ) -> None:
+        existing_columns = {
+            row[1] for row in connection.execute(f"PRAGMA table_info({table_name})")
+        }
+        if column_name not in existing_columns:
+            connection.execute(
+                f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+            )
 
     def get_user_by_telegram_id(self, telegram_id: int) -> UserRecord | None:
         with self.connect() as connection:
@@ -115,6 +135,7 @@ class SQLiteRepository:
         *,
         title: str,
         event_at: str,
+        event_at_utc: str,
         timezone: str | None = None,
         source_text: str | None = None,
     ) -> EventRecord:
@@ -124,10 +145,12 @@ class SQLiteRepository:
         with self.connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO events (user_id, title, event_at, timezone, source_text)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO events (
+                    user_id, title, event_at, event_at_utc, timezone, source_text
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (user.id, title, event_at, event_timezone, source_text),
+                (user.id, title, event_at, event_at_utc, event_timezone, source_text),
             )
             row = connection.execute(
                 "SELECT * FROM events WHERE id = ?",
@@ -140,16 +163,19 @@ class SQLiteRepository:
         event_id: int,
         *,
         reminder_at: str,
+        reminder_at_utc: str,
         status: str = "pending",
         sent_at: str | None = None,
     ) -> ReminderRecord:
         with self.connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO reminders (event_id, reminder_at, status, sent_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO reminders (
+                    event_id, reminder_at, reminder_at_utc, status, sent_at
+                )
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (event_id, reminder_at, status, sent_at),
+                (event_id, reminder_at, reminder_at_utc, status, sent_at),
             )
             row = connection.execute(
                 "SELECT * FROM reminders WHERE id = ?",

@@ -64,12 +64,14 @@ class SQLiteRepositoryTest(unittest.TestCase):
                 222,
                 title="Team sync",
                 event_at="2026-06-06T10:00:00+03:00",
+                event_at_utc="2026-06-06T07:00:00+00:00",
                 timezone="Europe/Kyiv",
                 source_text="tomorrow at 10:00",
             )
             reminder = repo.create_reminder(
                 event.id,
                 reminder_at="2026-06-06T09:45:00+03:00",
+                reminder_at_utc="2026-06-06T06:45:00+00:00",
             )
 
             stored_event = repo.get_event_by_id(event.id)
@@ -79,9 +81,11 @@ class SQLiteRepositoryTest(unittest.TestCase):
 
             self.assertEqual(event.title, "Team sync")
             self.assertEqual(stored_event.event_at, "2026-06-06T10:00:00+03:00")
+            self.assertEqual(stored_event.event_at_utc, "2026-06-06T07:00:00+00:00")
             self.assertEqual(stored_event.timezone, "Europe/Kyiv")
             self.assertEqual(stored_event.source_text, "tomorrow at 10:00")
             self.assertEqual(stored_reminder.reminder_at, "2026-06-06T09:45:00+03:00")
+            self.assertEqual(stored_reminder.reminder_at_utc, "2026-06-06T06:45:00+00:00")
             self.assertEqual(len(user_events), 1)
             self.assertEqual(user_events[0].id, event.id)
             self.assertEqual(len(event_reminders), 1)

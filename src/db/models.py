@@ -30,6 +30,7 @@ class EventRecord:
     user_id: int
     title: str
     event_at: str
+    event_at_utc: str
     timezone: str
     source_text: str | None
     created_at: str
@@ -41,6 +42,7 @@ class ReminderRecord:
     id: int
     event_id: int
     reminder_at: str
+    reminder_at_utc: str
     status: str
     sent_at: str | None
     created_at: str

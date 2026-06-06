@@ -58,9 +58,10 @@ class _FakeEventConfirmation:
             id=1,
             user_id=111,
             title="Team sync",
-            event_at="2026-06-07T15:00:00",
+            event_at="2026-06-07T15:00:00+03:00",
+            event_at_utc="2026-06-07T12:00:00+00:00",
             timezone="Europe/Kyiv",
-            source_text="Р·Р°РІС‚СЂР° Рѕ 15:00 Р·СѓСЃС‚СЂС–С‡",
+            source_text="завтра о 15:00 зустріч",
             created_at="2026-06-06 10:00:00",
             updated_at="2026-06-06 10:00:00",
         )
@@ -222,7 +223,7 @@ class BotHandlersTest(unittest.TestCase):
                 if handler.callback.__name__ == "handle_text"
             )
             message = AsyncMock()
-            message.text = "Р·Р°РІС‚СЂР° Рѕ 15:00 Р·СѓСЃС‚СЂС–С‡"
+            message.text = "завтра о 15:00 зустріч"
             message.from_user.id = 111
 
             with patch("bot.handlers.parse_event_text") as parse_event_text:

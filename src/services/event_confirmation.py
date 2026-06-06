@@ -6,11 +6,13 @@ from dataclasses import dataclass, field
 
 from db.repository import SQLiteRepository
 from parsing.models import ParsedEventDraft
+from services.timezone_service import TimezoneService
 
 
 @dataclass(slots=True)
 class EventConfirmationService:
     repository: SQLiteRepository
+    timezone_service: TimezoneService
     default_timezone: str
     _pending_events: dict[int, ParsedEventDraft] = field(default_factory=dict)
 
@@ -26,7 +28,16 @@ class EventConfirmationService:
         lines.append(f"Title: {draft.title or 'Untitled'}")
 
         if draft.event_datetime is not None:
-            lines.append(f"When: {draft.event_datetime.isoformat()}")
+            local_event = self.timezone_service.format_local_isoformat(
+                draft.event_datetime,
+                timezone,
+            )
+            utc_event = self.timezone_service.to_utc_isoformat(
+                draft.event_datetime,
+                timezone,
+            )
+            lines.append(f"When: {local_event}")
+            lines.append(f"UTC: {utc_event}")
         else:
             lines.append("When: incomplete")
 
@@ -66,10 +77,19 @@ class EventConfirmationService:
             return None
 
         timezone = self._get_user_timezone(telegram_id)
+        event_at_local = self.timezone_service.format_local_isoformat(
+            draft.event_datetime,
+            timezone,
+        )
+        event_at_utc = self.timezone_service.to_utc_isoformat(
+            draft.event_datetime,
+            timezone,
+        )
         event = self.repository.create_event(
             telegram_id,
             title=draft.title or "Untitled",
-            event_at=draft.event_datetime.isoformat(),
+            event_at=event_at_local,
+            event_at_utc=event_at_utc,
             timezone=timezone,
             source_text=draft.source_text,
         )

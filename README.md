@@ -9,6 +9,8 @@ Minimal bootstrap for a Telegram bot that creates reminders from text and voice 
 2. Fill in the required values.
 3. Install Python 3.12+.
 4. Run `python main.py`.
+
+The app reads `.env` from the project root automatically.
 ```
 
 ## Bot Commands

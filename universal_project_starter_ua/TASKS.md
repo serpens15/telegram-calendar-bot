@@ -206,7 +206,7 @@ Test Scenarios:
 - Negative: некоректні дані відхиляються.
 - Edge: порожня база відкривається без помилки.
 
-Status: Not started
+Status: Done
 
 ### TASK-005: Access Control for MVP
 

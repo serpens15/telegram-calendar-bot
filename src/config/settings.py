@@ -13,6 +13,7 @@ class BotSettings:
     app_env: str
     log_level: str
     default_timezone: str
+    database_path: str
     allowed_telegram_ids: tuple[int, ...]
 
 
@@ -60,5 +61,6 @@ def load_settings() -> BotSettings:
         app_env=os.getenv("APP_ENV", "development").strip(),
         log_level=os.getenv("LOG_LEVEL", "info").strip(),
         default_timezone=os.getenv("DEFAULT_TIMEZONE", "Europe/Kyiv").strip(),
+        database_path=os.getenv("DATABASE_PATH", "telegram_calendar.sqlite3").strip(),
         allowed_telegram_ids=_parse_allowed_ids(os.getenv("ALLOWED_TELEGRAM_IDS", "")),
     )

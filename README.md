@@ -11,6 +11,7 @@ Minimal bootstrap for a Telegram bot that creates reminders from text and voice 
 4. Run `python main.py`.
 
 The app reads `.env` from the project root automatically.
+SQLite storage is created automatically at the path in `DATABASE_PATH`.
 ```
 
 ## Bot Commands

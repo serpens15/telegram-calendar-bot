@@ -84,7 +84,7 @@ Test Scenarios:
 - Negative: відсутній `.env` дає зрозумілу помилку.
 - Edge: повторний локальний запуск не ламає проєкт.
 
-Status: Done
+Status: Not started
 
 ### TASK-002: Bot Skeleton
 
@@ -289,7 +289,7 @@ Test Scenarios:
 - Negative: некоректна дата не проходить.
 - Edge: текст без часу викликає уточнення.
 
-Status: Not started
+Status: Done
 
 ### TASK-007: Event Confirmation Flow
 
@@ -331,7 +331,7 @@ Test Scenarios:
 - Negative: cancel очищає сценарій.
 - Edge: повторне підтвердження не створює дубль.
 
-Status: Not started
+Status: Done
 
 ### TASK-008: Voice Transcription Flow
 

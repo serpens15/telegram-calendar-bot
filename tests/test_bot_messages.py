@@ -25,8 +25,9 @@ class BotMessagesTest(unittest.TestCase):
 
         self.assertIn("/start", text)
         self.assertIn("/help", text)
+        self.assertIn("/confirm", text)
+        self.assertIn("/cancel", text)
 
 
 if __name__ == "__main__":
     unittest.main()
-

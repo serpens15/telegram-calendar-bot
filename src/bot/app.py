@@ -9,6 +9,8 @@ from .handlers import build_router
 from config.settings import load_settings
 from db.repository import SQLiteRepository
 from security.access_control import AccessControlService
+from services.event_confirmation import EventConfirmationService
+from services.timezone_service import TimezoneService
 
 
 def _configure_logging(level_name: str) -> None:
@@ -34,9 +36,20 @@ async def run_bot() -> None:
     )
     access_control.sync_allow_list()
 
+    event_confirmation = EventConfirmationService(
+        repository=repository,
+        default_timezone=settings.default_timezone,
+    )
+    timezone_service = TimezoneService(
+        repository=repository,
+        default_timezone=settings.default_timezone,
+    )
+
     bot = Bot(token=settings.telegram_bot_token)
     dispatcher = Dispatcher()
-    dispatcher.include_router(build_router(access_control))
+    dispatcher.include_router(
+        build_router(access_control, event_confirmation, timezone_service)
+    )
 
     logging.getLogger(__name__).info(
         "Starting Telegram Calendar Bot in %s mode with timezone %s",

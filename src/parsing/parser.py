@@ -95,6 +95,7 @@ def parse_event_text(
     text: str,
     *,
     reference_date: date | None = None,
+    reference_datetime: datetime | None = None,
 ) -> ParsedEventDraft:
     source_text = text.strip()
     if not source_text:
@@ -108,16 +109,26 @@ def parse_event_text(
             errors=("empty_text",),
         )
 
-    reference = reference_date or date.today()
+    reference = reference_date or (reference_datetime.date() if reference_datetime else date.today())
+    reference_dt = reference_datetime or datetime.combine(reference, datetime.now().time())
     removed_spans: list[tuple[int, int]] = []
 
-    event_date, date_span, date_error = _extract_date(source_text, reference)
-    if date_span is not None:
-        removed_spans.append(date_span)
+    event_datetime, relative_span = _extract_relative_datetime(source_text, reference_dt)
+    date_error = None
+    time_error = None
 
-    event_time, time_span, time_error = _extract_time(source_text)
-    if time_span is not None:
-        removed_spans.append(time_span)
+    if event_datetime is not None:
+        event_date = event_datetime.date()
+        event_time = event_datetime.time().replace(microsecond=0)
+        removed_spans.append(relative_span)
+    else:
+        event_date, date_span, date_error = _extract_date(source_text, reference)
+        if date_span is not None:
+            removed_spans.append(date_span)
+
+        event_time, time_span, time_error = _extract_time(source_text)
+        if time_span is not None:
+            removed_spans.append(time_span)
 
     title = _extract_title(source_text, removed_spans)
 
@@ -146,11 +157,12 @@ def parse_event_text(
     else:
         status = "complete"
 
-    event_datetime = (
-        datetime.combine(event_date, event_time)
-        if event_date is not None and event_time is not None
-        else None
-    )
+    if event_datetime is None:
+        event_datetime = (
+            datetime.combine(event_date, event_time)
+            if event_date is not None and event_time is not None
+            else None
+        )
 
     return ParsedEventDraft(
         source_text=source_text,
@@ -161,6 +173,66 @@ def parse_event_text(
         status=status,
         missing_fields=tuple(missing_fields),
         errors=tuple(dict.fromkeys(errors)),
+    )
+
+
+def _extract_relative_datetime(
+    text: str,
+    reference_datetime: datetime,
+) -> tuple[datetime | None, tuple[int, int] | None]:
+    marker = re.search(r"\bчерез\b", text, re.IGNORECASE)
+    if marker is None:
+        return None, None
+
+    position = marker.end()
+    hours = 0
+    minutes = 0
+    matched_end = position
+    tail = text[position:]
+
+    half_hour_match = re.match(r"\s*(?:пів\s*години|півгодини)\b", tail, re.IGNORECASE)
+    if half_hour_match is not None:
+        minutes = 30
+        matched_end = position + half_hour_match.end()
+        return (
+            reference_datetime.replace(microsecond=0) + timedelta(minutes=minutes),
+            (marker.start(), matched_end),
+        )
+
+    component_pattern = re.compile(
+        r"\s*(?:(?P<number>\d+)\s*)?"
+        r"(?P<unit>год(?:\.|ину|ини|ин)?|хв(?:\.|илину|илини|илин)?)\b",
+        re.IGNORECASE,
+    )
+
+    while True:
+        component = component_pattern.match(text, matched_end)
+        if component is None:
+            break
+
+        unit = component.group("unit").lower().rstrip(".")
+        number_raw = component.group("number")
+        if number_raw is None:
+            if unit.startswith("год"):
+                amount = 1
+            else:
+                break
+        else:
+            amount = int(number_raw)
+
+        if unit.startswith("год"):
+            hours += amount
+        else:
+            minutes += amount
+
+        matched_end = component.end()
+
+    if hours == 0 and minutes == 0:
+        return None, None
+
+    return (
+        reference_datetime.replace(microsecond=0) + timedelta(hours=hours, minutes=minutes),
+        (marker.start(), matched_end),
     )
 
 

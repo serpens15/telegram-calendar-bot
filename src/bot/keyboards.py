@@ -18,6 +18,9 @@ EVENT_DELETE_CALLBACK_PREFIX = "event:delete:"
 EVENT_DELETE_CONFIRM_CALLBACK_PREFIX = "event:delete:confirm:"
 EVENT_CREATE_CONFIRM_CALLBACK = "event:create:confirm"
 EVENT_CREATE_CANCEL_CALLBACK = "event:create:cancel"
+EVENT_CREATE_DATE_CALLBACK_PREFIX = "event:create:date:"
+EVENT_CREATE_TIME_CALLBACK_PREFIX = "event:create:time:"
+EVENT_CREATE_RELATIVE_CALLBACK_PREFIX = "event:create:relative:"
 EVENT_DELETE_CANCEL_CALLBACK = "event:delete:cancel"
 
 SUPPORTED_TIMEZONES: tuple[str, ...] = (
@@ -85,6 +88,51 @@ def event_confirmation_keyboard():
                 _inline_button("✅ Підтвердити", EVENT_CREATE_CONFIRM_CALLBACK),
                 _inline_button("❌ Скасувати", EVENT_CREATE_CANCEL_CALLBACK),
             ]
+        ]
+    )
+
+
+def event_date_selection_keyboard():
+    from aiogram.types import InlineKeyboardMarkup
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _inline_button("Сьогодні", f"{EVENT_CREATE_DATE_CALLBACK_PREFIX}today"),
+                _inline_button("Завтра", f"{EVENT_CREATE_DATE_CALLBACK_PREFIX}tomorrow"),
+            ],
+            [
+                _inline_button(
+                    "Післязавтра",
+                    f"{EVENT_CREATE_DATE_CALLBACK_PREFIX}after_tomorrow",
+                ),
+            ],
+            [
+                _inline_button("+15 хв", f"{EVENT_CREATE_RELATIVE_CALLBACK_PREFIX}15"),
+                _inline_button("+30 хв", f"{EVENT_CREATE_RELATIVE_CALLBACK_PREFIX}30"),
+            ],
+            [
+                _inline_button("+1 год", f"{EVENT_CREATE_RELATIVE_CALLBACK_PREFIX}60"),
+                _inline_button("+2 год", f"{EVENT_CREATE_RELATIVE_CALLBACK_PREFIX}120"),
+            ],
+        ]
+    )
+
+
+def event_time_selection_keyboard():
+    from aiogram.types import InlineKeyboardMarkup
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _inline_button("09:00", f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}09:00"),
+                _inline_button("12:00", f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}12:00"),
+                _inline_button("15:00", f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}15:00"),
+            ],
+            [
+                _inline_button("18:00", f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}18:00"),
+                _inline_button("21:00", f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}21:00"),
+            ],
         ]
     )
 
@@ -163,4 +211,3 @@ def delete_events_keyboard(items: list[DeleteEventKeyboardItem]):
         )
 
     return InlineKeyboardMarkup(inline_keyboard=inline_rows)
-

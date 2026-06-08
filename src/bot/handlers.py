@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, time
+from datetime import date, datetime, time, timedelta
 
 from parsing import parse_event_text
 from security.access_control import AccessControlService
@@ -14,7 +14,10 @@ from services.timezone_service import TimezoneService
 
 from .keyboards import (
     EVENT_CREATE_CANCEL_CALLBACK,
+    EVENT_CREATE_DATE_CALLBACK_PREFIX,
     EVENT_CREATE_CONFIRM_CALLBACK,
+    EVENT_CREATE_RELATIVE_CALLBACK_PREFIX,
+    EVENT_CREATE_TIME_CALLBACK_PREFIX,
     EVENT_DELETE_CALLBACK_PREFIX,
     EVENT_DELETE_CANCEL_CALLBACK,
     EVENT_DELETE_CONFIRM_CALLBACK_PREFIX,
@@ -23,6 +26,8 @@ from .keyboards import (
     delete_confirmation_keyboard,
     delete_events_keyboard,
     event_confirmation_keyboard,
+    event_date_selection_keyboard,
+    event_time_selection_keyboard,
     main_menu_keyboard,
     start_keyboard,
     timezone_selection_keyboard,
@@ -127,6 +132,34 @@ def build_router(
     async def _start_add_flow(message: Message, state: FSMContext) -> None:
         await state.set_state(EventCreationStates.waiting_title)
         await message.answer("Вкажіть назву події.")
+
+    async def _show_event_creation_preview(
+        message: Message,
+        state: FSMContext,
+        *,
+        title: str,
+        event_date: date,
+        event_time: time,
+        telegram_id: int | None = None,
+    ) -> None:
+        user_telegram_id = telegram_id if telegram_id is not None else _telegram_id(message)
+        timezone = timezone_service.get_user_timezone(user_telegram_id) if timezone_service else "Europe/Kyiv"
+        preview_text = (
+            event_service.build_preview_text(
+                title=title,
+                event_date=event_date,
+                event_time=event_time,
+                timezone=timezone,
+            )
+            if event_service
+            else "Підтвердіть подію."
+        )
+        await state.update_data(
+            event_date=event_date.isoformat(),
+            event_time=event_time.isoformat(),
+        )
+        await state.set_state(EventCreationStates.confirming)
+        await message.answer(preview_text, reply_markup=event_confirmation_keyboard())
 
     async def _show_future_events(message: Message) -> None:
         if event_service is None:
@@ -295,7 +328,10 @@ def build_router(
 
             await state.update_data(event_title=title)
             await state.set_state(EventCreationStates.waiting_date)
-            await message.answer("Вкажіть дату події, наприклад 15.06.2026 або завтра.")
+            await message.answer(
+                "Вкажіть дату події або оберіть швидкий варіант.",
+                reply_markup=event_date_selection_keyboard(),
+            )
             return True
 
         if current_state == EventCreationStates.waiting_date.state:
@@ -313,25 +349,13 @@ def build_router(
                     await message.answer("Не вдалося зібрати дані події. Почніть ще раз.")
                     return True
 
-                event_date = relative_draft.event_datetime.date()
-                event_time = relative_draft.event_datetime.time()
-                timezone = timezone_service.get_user_timezone(_telegram_id(message)) if timezone_service else "Europe/Kyiv"
-                preview_text = (
-                    event_service.build_preview_text(
-                        title=title,
-                        event_date=event_date,
-                        event_time=event_time,
-                        timezone=timezone,
-                    )
-                    if event_service
-                    else "Підтвердіть подію."
+                await _show_event_creation_preview(
+                    message,
+                    state,
+                    title=title,
+                    event_date=relative_draft.event_datetime.date(),
+                    event_time=relative_draft.event_datetime.time(),
                 )
-                await state.update_data(
-                    event_date=event_date.isoformat(),
-                    event_time=event_time.isoformat(),
-                )
-                await state.set_state(EventCreationStates.confirming)
-                await message.answer(preview_text, reply_markup=event_confirmation_keyboard())
                 return True
 
             try:
@@ -342,7 +366,10 @@ def build_router(
 
             await state.update_data(event_date=event_date.isoformat())
             await state.set_state(EventCreationStates.waiting_time)
-            await message.answer("Вкажіть час події, наприклад 18:00.")
+            await message.answer(
+                "Вкажіть час події або оберіть швидкий варіант.",
+                reply_markup=event_time_selection_keyboard(),
+            )
             return True
 
         if current_state == EventCreationStates.waiting_time.state:
@@ -362,20 +389,13 @@ def build_router(
                 return True
 
             event_date = date.fromisoformat(event_date_raw)
-            timezone = timezone_service.get_user_timezone(_telegram_id(message)) if timezone_service else "Europe/Kyiv"
-            preview_text = (
-                event_service.build_preview_text(
-                    title=title,
-                    event_date=event_date,
-                    event_time=event_time,
-                    timezone=timezone,
-                )
-                if event_service
-                else "Підтвердіть подію."
+            await _show_event_creation_preview(
+                message,
+                state,
+                title=title,
+                event_date=event_date,
+                event_time=event_time,
             )
-            await state.update_data(event_time=event_time.isoformat())
-            await state.set_state(EventCreationStates.confirming)
-            await message.answer(preview_text, reply_markup=event_confirmation_keyboard())
             return True
 
         return False
@@ -535,6 +555,96 @@ def build_router(
 
         if data == EVENT_CREATE_CANCEL_CALLBACK:
             await _cancel_event_creation(callback.message, state)
+            await callback.answer()
+            return
+
+        if data.startswith(EVENT_CREATE_DATE_CALLBACK_PREFIX):
+            if await state.get_state() != EventCreationStates.waiting_date.state:
+                await callback.answer()
+                return
+
+            date_key = data.removeprefix(EVENT_CREATE_DATE_CALLBACK_PREFIX)
+            today = date.today()
+            date_offsets = {
+                "today": 0,
+                "tomorrow": 1,
+                "after_tomorrow": 2,
+            }
+            if date_key not in date_offsets:
+                await callback.answer("Некоректна дата.")
+                return
+
+            selected_date = today + timedelta(days=date_offsets[date_key])
+            await state.update_data(event_date=selected_date.isoformat())
+            await state.set_state(EventCreationStates.waiting_time)
+            await callback.message.answer(
+                "Оберіть час події або введіть вручну.",
+                reply_markup=event_time_selection_keyboard(),
+            )
+            await callback.answer()
+            return
+
+        if data.startswith(EVENT_CREATE_TIME_CALLBACK_PREFIX):
+            if await state.get_state() != EventCreationStates.waiting_time.state:
+                await callback.answer()
+                return
+
+            selected_time_raw = data.removeprefix(EVENT_CREATE_TIME_CALLBACK_PREFIX)
+            state_data = await state.get_data()
+            title = state_data.get("event_title")
+            event_date_raw = state_data.get("event_date")
+            if not title or not event_date_raw:
+                await state.clear()
+                await callback.message.answer("Не вдалося зібрати дані події. Почніть ще раз.")
+                await callback.answer()
+                return
+
+            try:
+                selected_time = time.fromisoformat(selected_time_raw)
+                selected_date = date.fromisoformat(event_date_raw)
+            except ValueError:
+                await callback.answer("Некоректний час.")
+                return
+
+            await _show_event_creation_preview(
+                callback.message,
+                state,
+                title=title,
+                event_date=selected_date,
+                event_time=selected_time,
+                telegram_id=telegram_id,
+            )
+            await callback.answer()
+            return
+
+        if data.startswith(EVENT_CREATE_RELATIVE_CALLBACK_PREFIX):
+            if await state.get_state() != EventCreationStates.waiting_date.state:
+                await callback.answer()
+                return
+
+            state_data = await state.get_data()
+            title = state_data.get("event_title")
+            if not title:
+                await state.clear()
+                await callback.message.answer("Не вдалося зібрати дані події. Почніть ще раз.")
+                await callback.answer()
+                return
+
+            try:
+                minutes = int(data.removeprefix(EVENT_CREATE_RELATIVE_CALLBACK_PREFIX))
+            except ValueError:
+                await callback.answer("Некоректний час.")
+                return
+
+            selected_datetime = datetime.now().replace(microsecond=0) + timedelta(minutes=minutes)
+            await _show_event_creation_preview(
+                callback.message,
+                state,
+                title=title,
+                event_date=selected_datetime.date(),
+                event_time=selected_datetime.time(),
+                telegram_id=telegram_id,
+            )
             await callback.answer()
             return
 

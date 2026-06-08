@@ -22,7 +22,10 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from bot.keyboards import (
+    EVENT_CREATE_DATE_CALLBACK_PREFIX,
     EVENT_CREATE_CONFIRM_CALLBACK,
+    EVENT_CREATE_RELATIVE_CALLBACK_PREFIX,
+    EVENT_CREATE_TIME_CALLBACK_PREFIX,
     EVENT_DELETE_CONFIRM_CALLBACK_PREFIX,
     START_BUTTON,
 )
@@ -436,6 +439,86 @@ class BotHandlersTest(unittest.TestCase):
         self.assertEqual(state.state, EventCreationStates.confirming.state)
         self.assertIn("Створити подію?", message.answer.await_args.args[0])
         self.assertIn("Зустріч", message.answer.await_args.args[0])
+        self.assertIn("event_date", state.data)
+        self.assertIn("event_time", state.data)
+
+    def test_add_flow_uses_date_and_time_inline_buttons(self) -> None:
+        event_service = _FakeEventService()
+        timezone_service = _FakeTimezoneService("Europe/Berlin")
+        state = _FakeState()
+
+        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
+            router = build_router(
+                _FakeAccessControl({111}),
+                None,
+                timezone_service,
+                None,
+                event_service,
+            )
+            handler = router.message.handlers[0].callback
+            callback_handler = router.callback_query.handlers[0].callback
+
+            message = AsyncMock()
+            message.from_user.id = 111
+            message.text = ADD_BUTTON
+            asyncio.run(handler(message, state))
+
+            message.text = "Зустріч"
+            asyncio.run(handler(message, state))
+            self.assertEqual(state.state, EventCreationStates.waiting_date.state)
+            date_keyboard = message.answer.await_args.kwargs["reply_markup"].kwargs["inline_keyboard"]
+            self.assertEqual(date_keyboard[0][0].callback_data, f"{EVENT_CREATE_DATE_CALLBACK_PREFIX}today")
+
+            callback = AsyncMock()
+            callback.data = f"{EVENT_CREATE_DATE_CALLBACK_PREFIX}tomorrow"
+            callback.message = AsyncMock()
+            callback.message.from_user.id = 999
+            callback.from_user.id = 111
+            asyncio.run(callback_handler(callback, state))
+            self.assertEqual(state.state, EventCreationStates.waiting_time.state)
+            time_keyboard = callback.message.answer.await_args.kwargs["reply_markup"].kwargs["inline_keyboard"]
+            self.assertEqual(time_keyboard[0][0].callback_data, f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}09:00")
+
+            callback.data = f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}18:00"
+            asyncio.run(callback_handler(callback, state))
+
+        self.assertEqual(state.state, EventCreationStates.confirming.state)
+        self.assertIn("Створити подію?", callback.message.answer.await_args.args[0])
+        self.assertIn("Часовий пояс: Europe/Berlin", callback.message.answer.await_args.args[0])
+        self.assertEqual(timezone_service.set_calls, [])
+
+    def test_add_flow_uses_relative_inline_button(self) -> None:
+        event_service = _FakeEventService()
+        state = _FakeState()
+
+        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
+            router = build_router(
+                _FakeAccessControl({111}),
+                None,
+                _FakeTimezoneService(),
+                None,
+                event_service,
+            )
+            handler = router.message.handlers[0].callback
+            callback_handler = router.callback_query.handlers[0].callback
+
+            message = AsyncMock()
+            message.from_user.id = 111
+            message.text = ADD_BUTTON
+            asyncio.run(handler(message, state))
+
+            message.text = "Нагадати"
+            asyncio.run(handler(message, state))
+
+            callback = AsyncMock()
+            callback.data = f"{EVENT_CREATE_RELATIVE_CALLBACK_PREFIX}15"
+            callback.message = AsyncMock()
+            callback.message.from_user.id = 999
+            callback.from_user.id = 111
+            asyncio.run(callback_handler(callback, state))
+
+        self.assertEqual(state.state, EventCreationStates.confirming.state)
+        self.assertIn("Нагадати", callback.message.answer.await_args.args[0])
         self.assertIn("event_date", state.data)
         self.assertIn("event_time", state.data)
 

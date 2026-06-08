@@ -300,6 +300,40 @@ def build_router(
 
         if current_state == EventCreationStates.waiting_date.state:
             raw_date = getattr(message, "text", "").strip()
+            relative_draft = (
+                parse_event_text(raw_date)
+                if "через" in raw_date.lower()
+                else None
+            )
+            if relative_draft is not None and relative_draft.event_datetime is not None:
+                data = await state.get_data()
+                title = data.get("event_title")
+                if not title:
+                    await state.clear()
+                    await message.answer("Не вдалося зібрати дані події. Почніть ще раз.")
+                    return True
+
+                event_date = relative_draft.event_datetime.date()
+                event_time = relative_draft.event_datetime.time()
+                timezone = timezone_service.get_user_timezone(_telegram_id(message)) if timezone_service else "Europe/Kyiv"
+                preview_text = (
+                    event_service.build_preview_text(
+                        title=title,
+                        event_date=event_date,
+                        event_time=event_time,
+                        timezone=timezone,
+                    )
+                    if event_service
+                    else "Підтвердіть подію."
+                )
+                await state.update_data(
+                    event_date=event_date.isoformat(),
+                    event_time=event_time.isoformat(),
+                )
+                await state.set_state(EventCreationStates.confirming)
+                await message.answer(preview_text, reply_markup=event_confirmation_keyboard())
+                return True
+
             try:
                 event_date = event_service.parse_date(raw_date) if event_service else date.today()
             except ValueError:

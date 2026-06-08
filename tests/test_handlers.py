@@ -408,6 +408,37 @@ class BotHandlersTest(unittest.TestCase):
         self.assertTrue(state.cleared)
         self.assertIn("Подію створено", callback.message.answer.await_args.args[0])
 
+    def test_add_flow_accepts_relative_duration_in_date_step(self) -> None:
+        event_service = _FakeEventService()
+        state = _FakeState()
+
+        with patch.dict(sys.modules, _install_fake_aiogram(), clear=False):
+            router = build_router(
+                _FakeAccessControl({111}),
+                None,
+                _FakeTimezoneService(),
+                None,
+                event_service,
+            )
+            handler = router.message.handlers[0].callback
+
+            message = AsyncMock()
+            message.from_user.id = 111
+            message.text = ADD_BUTTON
+            asyncio.run(handler(message, state))
+
+            message.text = "Зустріч"
+            asyncio.run(handler(message, state))
+
+            message.text = "через 15 хв"
+            asyncio.run(handler(message, state))
+
+        self.assertEqual(state.state, EventCreationStates.confirming.state)
+        self.assertIn("Створити подію?", message.answer.await_args.args[0])
+        self.assertIn("Зустріч", message.answer.await_args.args[0])
+        self.assertIn("event_date", state.data)
+        self.assertIn("event_time", state.data)
+
     def test_list_and_delete_flow_uses_inline_confirmation(self) -> None:
         event_service = _FakeEventService()
         state = _FakeState()

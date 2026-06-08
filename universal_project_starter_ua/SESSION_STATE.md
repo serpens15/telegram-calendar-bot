@@ -18,7 +18,7 @@ AI має відповідати українською мовою за замо
 Project name: Telegram Calendar Bot
 Current phase: MVP implementation
 Current goal: Побудувати Telegram-бота для створення подій і локальних нагадувань з текстових повідомлень.
-Current task: Після завершення onboarding/menu/FSM/list/delete/scheduler перейти до наступного підтвердженого MVP-кроку.
+Current task: TASK-012 testing/documentation виконано; далі підтвердити наступний крок: voice/Whisper або додаткові timezone/DST тести.
 Last updated: 2026-06-07
 ```
 
@@ -38,6 +38,8 @@ Last updated: 2026-06-07
 - Додано локальний scheduler reminders через APScheduler: відновлення pending reminders при старті та планування reminders після створення нової події.
 - Для кожної нової події створюються два нагадування: за 15 хвилин до події та рівно в час події.
 - Наявні тести для access control, bot messages, onboarding, event confirmation, handlers, parsing, repository, reminder scheduler, settings і timezone service.
+- Оновлено README і проєктні документи під реальний text-first MVP; voice/Whisper явно залишено в backlog / next stage.
+- TASK-012 Testing and Documentation позначено як Done.
 ```
 
 ## Important Decisions
@@ -77,6 +79,10 @@ Last updated: 2026-06-07
 - File: src/bot/app.py, src/bot/handlers.py, src/bot/keyboards.py, src/bot/states.py, src/services/event_service.py, src/services/onboarding_service.py, src/scheduler/reminder_scheduler.py
   What changed: Додано onboarding, keyboard UX, FSM creation, list/delete і scheduler wiring; виправлено confirm callback user id; додано другий reminder на час події.
   Why: Завершити текстовий вертикальний сценарій до локальних reminders.
+
+- File: README.md, universal_project_starter_ua/PROJECT.md, universal_project_starter_ua/REQUIREMENTS.md, universal_project_starter_ua/ARCHITECTURE.md, universal_project_starter_ua/TASKS.md, universal_project_starter_ua/SESSION_STATE.md
+  What changed: Документацію вирівняно з фактичною text-first MVP реалізацією; voice/Whisper позначено як backlog / next stage; TASK-012 позначено Done.
+  Why: Прибрати розбіжності між планом, документацією і кодом.
 ```
 
 ## Current Architecture / Direction
@@ -157,18 +163,18 @@ Result: 44 tests, OK.
 Known test gaps:
 - `pytest` не встановлений у поточному Python, тому перевірка виконувалась через unittest.
 - Потрібні додаткові edge-case тести для timezone і DST.
-- Потрібна інтеграційна перевірка реального Telegram runtime і доставки reminders.
+- Потрібна інтеграційна перевірка доставки reminders у реальному Telegram runtime. `python src\main.py` поза sandbox не впав одразу і працював до timeout, що схоже на нормальний long-running polling процес; доставку тестового reminder ще потрібно перевірити вручну з ботом.
 ```
 
 ## Next Recommended Step
 
 ```text
 Перед кодом підтвердити наступну гілку реалізації:
-1. Local run verification і cleanup/documentation.
-2. Voice/Whisper transcription.
-3. Додаткові timezone/DST edge-case tests.
+1. Додаткові timezone/DST edge-case tests.
+2. Local run verification з реальним `.env` і тестовою подією.
+3. Voice/Whisper transcription.
 
-Рекомендація: спочатку local run verification і cleanup/documentation, потім voice/Whisper.
+Рекомендація: спочатку timezone/DST edge-case tests або local run verification, потім voice/Whisper.
 ```
 
 ## End-of-Session Update Checklist

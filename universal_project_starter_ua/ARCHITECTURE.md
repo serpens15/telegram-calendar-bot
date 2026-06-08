@@ -4,7 +4,7 @@
 
 ## 1. Architecture Summary
 
-MVP побудований як один Python-сервіс Telegram-бота з окремими шарами для обробки повідомлень, транскрибації голосу, парсингу дати й часу, збереження даних та планування нагадувань.
+Поточний text-first MVP побудований як один Python-сервіс Telegram-бота з окремими шарами для обробки повідомлень, парсингу дати й часу, збереження даних та планування нагадувань. Транскрибація голосу через Whisper залишається запланованим шаром для наступного етапу.
 
 Основна ідея: handler лише приймає подію з Telegram, далі бізнес-логіка працює через сервіси, а зберігання і нагадування винесені в окремі модулі.
 
@@ -19,6 +19,7 @@ MVP побудований як один Python-сервіс Telegram-бота �
 
 - Voice Transcription Layer:
   Responsibility: завантаження аудіо з Telegram і перетворення voice message у текст через Whisper.
+  Status: backlog / next stage, не активна частина поточного text-first MVP.
 
 - Application Service Layer:
   Responsibility: orchestration сценаріїв створення, підтвердження, списку і видалення подій.
@@ -82,6 +83,7 @@ Important fields:
 
 - Whisper:
   Purpose: speech-to-text для голосових повідомлень.
+  Current MVP status: не використовується в поточному text-first MVP.
   Cost: або локальна модель, або платний API залежно від фінальної реалізації.
   Risks: точність розпізнавання, затримки, вартість.
   Alternative: локальний faster-whisper.
@@ -121,7 +123,7 @@ Testing:
   pytest
 
 Other:
-  Whisper for voice transcription
+  Whisper planned for future voice transcription
   APScheduler for reminders
   python-dotenv or pydantic-settings for configuration
 ```

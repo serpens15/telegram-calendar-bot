@@ -58,6 +58,11 @@ _NUMERIC_DATE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_DAY_OF_MONTH_PATTERN = re.compile(
+    r"\b(?:на\s+)?(?P<day>0?[1-9]|[12]\d|3[01])\s+числа\b",
+    re.IGNORECASE,
+)
+
 _MONTH_NAMES = {
     "січня": 1,
     "лютого": 2,
@@ -89,6 +94,10 @@ _TIME_PATTERN = re.compile(
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPACE_BEFORE_PUNCTUATION_RE = re.compile(r"\s+([,.;:!?])")
 _SURROUNDING_PUNCTUATION_RE = re.compile(r"^[,.;:!?-]+|[,.;:!?-]+$")
+_TITLE_PREFIX_RE = re.compile(
+    r"^(?:нагадай|нагадати|нагадування|створи|створити)\s+",
+    re.IGNORECASE,
+)
 
 
 def parse_event_text(
@@ -164,6 +173,14 @@ def parse_event_text(
             else None
         )
 
+    confidence = _calculate_confidence(
+        status=status,
+        event_datetime=event_datetime,
+        title=title,
+        errors=errors,
+        missing_fields=missing_fields,
+    )
+
     return ParsedEventDraft(
         source_text=source_text,
         title=title or None,
@@ -173,6 +190,8 @@ def parse_event_text(
         status=status,
         missing_fields=tuple(missing_fields),
         errors=tuple(dict.fromkeys(errors)),
+        confidence=confidence,
+        parser_source="local",
     )
 
 
@@ -283,6 +302,17 @@ def _extract_date(
             return None, month_match.span(), "invalid_date"
         return event_date, month_match.span(), None
 
+    day_match = _DAY_OF_MONTH_PATTERN.search(text)
+    if day_match is not None:
+        try:
+            event_date = _build_day_of_month_date(
+                day=int(day_match.group("day")),
+                reference_date=reference_date,
+            )
+        except ValueError:
+            return None, day_match.span(), "invalid_date"
+        return event_date, day_match.span(), None
+
     return None, None, None
 
 
@@ -298,6 +328,30 @@ def _build_date(
     if not year_was_explicit and event_date < reference_date:
         event_date = date(year + 1, month, day)
     return event_date
+
+
+def _build_day_of_month_date(*, day: int, reference_date: date) -> date:
+    year = reference_date.year
+    month = reference_date.month
+
+    try:
+        event_date = date(year, month, day)
+    except ValueError:
+        event_date = _next_month_date(year=year, month=month, day=day)
+
+    if event_date < reference_date:
+        event_date = _next_month_date(year=year, month=month, day=day)
+
+    return event_date
+
+
+def _next_month_date(*, year: int, month: int, day: int) -> date:
+    next_month = month + 1
+    next_year = year
+    if next_month == 13:
+        next_month = 1
+        next_year += 1
+    return date(next_year, next_month, day)
 
 
 def _extract_time(text: str) -> tuple[time | None, tuple[int, int] | None, str | None]:
@@ -331,10 +385,30 @@ def _extract_title(text: str, removed_spans: Iterable[tuple[int, int]]) -> str:
     cleaned = _WHITESPACE_RE.sub(" ", cleaned).strip()
     cleaned = re.sub(r"^(?:о|в|у|на)\s+", "", cleaned, flags=re.IGNORECASE)
     cleaned = _SURROUNDING_PUNCTUATION_RE.sub("", cleaned).strip()
+    cleaned = _TITLE_PREFIX_RE.sub("", cleaned).strip()
     return cleaned or ""
 
 
 def _normalize_title(text: str) -> str:
     normalized = _WHITESPACE_RE.sub(" ", text).strip()
     normalized = _SPACE_BEFORE_PUNCTUATION_RE.sub(r"\1", normalized)
+    normalized = _TITLE_PREFIX_RE.sub("", normalized).strip()
     return normalized
+
+
+def _calculate_confidence(
+    *,
+    status: ParseStatus,
+    event_datetime: datetime | None,
+    title: str | None,
+    errors: list[str],
+    missing_fields: list[str],
+) -> float:
+    if status == "invalid":
+        return 0.0
+    if status == "complete" and event_datetime is not None and title:
+        return 0.92
+    if status == "needs_clarification":
+        penalty = 0.2 * len(missing_fields) + 0.1 * len(errors)
+        return max(0.2, 0.75 - penalty)
+    return 0.4

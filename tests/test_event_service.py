@@ -50,6 +50,70 @@ class EventServiceTest(unittest.TestCase):
             ],
         )
 
+    def test_create_event_stores_reminders_with_dst_start_utc_offset(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+            timezone_service = TimezoneService(
+                repository=repo,
+                default_timezone="Europe/Kyiv",
+            )
+            service = EventService(
+                repository=repo,
+                timezone_service=timezone_service,
+                default_reminder_minutes=15,
+            )
+
+            event = service.create_event(
+                111,
+                title="DST start",
+                event_date=date(2026, 3, 29),
+                event_time=time(4, 30),
+            )
+            reminders = repo.list_reminders_for_event(event.id)
+
+        self.assertEqual(event.event_at, "2026-03-29T04:30:00+03:00")
+        self.assertEqual(event.event_at_utc, "2026-03-29T01:30:00+00:00")
+        self.assertEqual(
+            [reminder.reminder_at_utc for reminder in reminders],
+            [
+                "2026-03-29T01:15:00+00:00",
+                "2026-03-29T01:30:00+00:00",
+            ],
+        )
+
+    def test_create_event_stores_reminders_with_dst_end_utc_offset(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+            timezone_service = TimezoneService(
+                repository=repo,
+                default_timezone="Europe/Kyiv",
+            )
+            service = EventService(
+                repository=repo,
+                timezone_service=timezone_service,
+                default_reminder_minutes=15,
+            )
+
+            event = service.create_event(
+                111,
+                title="DST end",
+                event_date=date(2026, 10, 25),
+                event_time=time(4, 30),
+            )
+            reminders = repo.list_reminders_for_event(event.id)
+
+        self.assertEqual(event.event_at, "2026-10-25T04:30:00+02:00")
+        self.assertEqual(event.event_at_utc, "2026-10-25T02:30:00+00:00")
+        self.assertEqual(
+            [reminder.reminder_at_utc for reminder in reminders],
+            [
+                "2026-10-25T02:15:00+00:00",
+                "2026-10-25T02:30:00+00:00",
+            ],
+        )
+
     def test_get_events_for_deletion_returns_only_future_events(self) -> None:
         with TemporaryDirectory() as temp_dir:
             repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")

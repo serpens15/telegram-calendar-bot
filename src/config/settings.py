@@ -16,6 +16,9 @@ class BotSettings:
     default_reminder_minutes: int
     database_path: str
     allowed_telegram_ids: tuple[int, ...]
+    parser_confidence_threshold: float
+    gemini_api_key: str
+    gemini_model: str
 
 
 def _parse_allowed_ids(raw_value: str) -> tuple[int, ...]:
@@ -34,6 +37,13 @@ def _parse_allowed_ids(raw_value: str) -> tuple[int, ...]:
 def _parse_int(raw_value: str, default: int) -> int:
     try:
         return int(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_float(raw_value: str, default: float) -> float:
+    try:
+        return float(raw_value)
     except (TypeError, ValueError):
         return default
 
@@ -75,4 +85,10 @@ def load_settings() -> BotSettings:
         ),
         database_path=os.getenv("DATABASE_PATH", "telegram_calendar.sqlite3").strip(),
         allowed_telegram_ids=_parse_allowed_ids(os.getenv("ALLOWED_TELEGRAM_IDS", "")),
+        parser_confidence_threshold=_parse_float(
+            os.getenv("PARSER_CONFIDENCE_THRESHOLD", "0.85"),
+            0.85,
+        ),
+        gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip(),
     )

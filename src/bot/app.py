@@ -7,8 +7,10 @@ import logging
 
 from config.settings import load_settings
 from db.repository import SQLiteRepository
+from parsing import ParserService
 from scheduler.reminder_scheduler import ReminderSchedulerService
 from security.access_control import AccessControlService
+from services.ai import GeminiService
 from services.event_service import EventService
 from services.event_confirmation import EventConfirmationService
 from services.onboarding_service import OnboardingService
@@ -55,6 +57,14 @@ async def run_bot() -> None:
         timezone_service=timezone_service,
         default_reminder_minutes=settings.default_reminder_minutes,
     )
+    gemini_service = GeminiService(
+        api_key=settings.gemini_api_key,
+        model=settings.gemini_model,
+    )
+    parser_service = ParserService(
+        ai_parser=gemini_service if gemini_service.is_configured else None,
+        confidence_threshold=settings.parser_confidence_threshold,
+    )
 
     bot = Bot(token=settings.telegram_bot_token)
     reminder_scheduler = ReminderSchedulerService(
@@ -79,6 +89,7 @@ async def run_bot() -> None:
             onboarding_service,
             event_service,
             reminder_scheduler,
+            parser_service,
         )
     )
 

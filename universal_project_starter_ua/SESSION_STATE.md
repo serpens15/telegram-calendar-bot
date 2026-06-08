@@ -18,8 +18,8 @@ AI має відповідати українською мовою за замо
 Project name: Telegram Calendar Bot
 Current phase: MVP implementation
 Current goal: Побудувати Telegram-бота для створення подій і локальних нагадувань з текстових повідомлень.
-Current task: TASK-012 testing/documentation виконано; далі підтвердити наступний крок: voice/Whisper або додаткові timezone/DST тести.
-Last updated: 2026-06-07
+Current task: TASK-018 natural language event creation with local-first parser and Gemini fallback виконано; далі local run verification з реальним `.env`.
+Last updated: 2026-06-08
 ```
 
 ## What Has Been Done
@@ -40,6 +40,13 @@ Last updated: 2026-06-07
 - Наявні тести для access control, bot messages, onboarding, event confirmation, handlers, parsing, repository, reminder scheduler, settings і timezone service.
 - Оновлено README і проєктні документи під реальний text-first MVP; voice/Whisper явно залишено в backlog / next stage.
 - TASK-012 Testing and Documentation позначено як Done.
+- Додано edge-case тести для Europe/Kyiv навколо старту й завершення DST у timezone conversion та створенні event reminders.
+- Додано ParserService з local-first parsing і Gemini fallback тільки при incomplete/low-confidence result.
+- Розширено локальний parser: confidence/source, "нагадати/нагадай" prefix cleanup, "N числа", приклади типу "Нагадати купити молоко сьогодні о 18:00".
+- Оновлено confirmation UI: inline-кнопки Підтвердити, Змінити дату, Змінити час, Скасувати; для зміни часу додано компактний pseudo-slider.
+- Після підтвердження або скасування create/delete операцій бот видаляє callback-повідомлення з inline-кнопками або прибирає клавіатуру fallback-ом, щоб користувач не дублював операції старими кнопками.
+- Додано опційний GeminiService через `GEMINI_API_KEY`/`GEMINI_MODEL`; без ключа зовнішні запити не виконуються.
+- Додано GoogleCalendarService stub і NotificationService wrapper як архітектурні точки розширення без реальної Google Calendar інтеграції.
 ```
 
 ## Important Decisions
@@ -73,12 +80,16 @@ Last updated: 2026-06-07
   Why: Потрібно зберігати локальний час, UTC час і timezone для подій.
 
 - File: tests/*
-  What changed: Додано/оновлено тести для поточних MVP-компонентів; останній запуск `python -m unittest discover -s tests -q` пройшов.
-  Why: Захистити поведінку onboarding, меню, FSM creation, list/delete, scheduler, storage, handlers, settings і timezone logic.
+  What changed: Додано/оновлено тести для поточних MVP-компонентів; додано timezone/DST edge-case тести для Europe/Kyiv; останній запуск `python -m unittest discover -s tests -q` пройшов.
+  Why: Захистити поведінку onboarding, меню, FSM creation, list/delete, scheduler, storage, handlers, settings, timezone conversion і reminder UTC scheduling.
 
 - File: src/bot/app.py, src/bot/handlers.py, src/bot/keyboards.py, src/bot/states.py, src/services/event_service.py, src/services/onboarding_service.py, src/scheduler/reminder_scheduler.py
-  What changed: Додано onboarding, keyboard UX, FSM creation, list/delete і scheduler wiring; виправлено confirm callback user id; додано другий reminder на час події.
-  Why: Завершити текстовий вертикальний сценарій до локальних reminders.
+  What changed: Додано onboarding, keyboard UX, FSM creation, list/delete і scheduler wiring; виправлено confirm callback user id; додано другий reminder на час події; оновлено natural-language confirmation flow і time pseudo-slider; після фінальних callback-операцій старі inline-повідомлення прибираються.
+  Why: Завершити текстовий вертикальний сценарій до локальних reminders, зменшити кількість ручних дій користувача і не дозволяти дублювати операції старими кнопками.
+
+- File: src/parsing/*, src/services/ai/*
+  What changed: Додано ParserService local-first orchestration, confidence/source у ParsedEventDraft, Gemini fallback adapter і розширення локального parser.
+  Why: Користувач має створювати подію одним повідомленням; Gemini має викликатися тільки якщо локальний parser не впорався.
 
 - File: README.md, universal_project_starter_ua/PROJECT.md, universal_project_starter_ua/REQUIREMENTS.md, universal_project_starter_ua/ARCHITECTURE.md, universal_project_starter_ua/TASKS.md, universal_project_starter_ua/SESSION_STATE.md
   What changed: Документацію вирівняно з фактичною text-first MVP реалізацією; voice/Whisper позначено як backlog / next stage; TASK-012 позначено Done.
@@ -124,7 +135,7 @@ MVP - один Python-сервіс Telegram-бота.
 
 ```text
 - Голосові повідомлення і Whisper transcription.
-- Покращений вибір дати/часу: псевдо-бігунок inline-кнопками або Telegram Web App з календарем і time picker.
+- Покращений вибір дати/часу через Telegram Web App з календарем і time picker; inline pseudo-slider для часу вже додано.
 - Google Calendar integration.
 - Повторювані події.
 - Premium/free limits і монетизація.
@@ -146,7 +157,7 @@ MVP - один Python-сервіс Telegram-бота.
 ```text
 - Risk: Timezone edge cases можуть ламати нагадування при DST або некоректному IANA timezone.
   Impact: Нагадування може прийти не в той час.
-  Next action: Додати edge-case тести для timezone conversion.
+  Next action: Частково закрито тестами для Europe/Kyiv DST start/end; за потреби додати покриття для інших timezone або неоднозначних локальних годин.
 
 - Risk: Scheduler реалізований, але не перевірений на реальному Telegram bot runtime у цій сесії.
   Impact: Unit-тести проходять, але інтеграційні проблеми запуску/доставки можуть проявитися лише локально з реальним токеном.
@@ -155,16 +166,21 @@ MVP - один Python-сервіс Telegram-бота.
 - Risk: Voice/Whisper може ускладнити MVP.
   Impact: Витрати, latency і залежність від зовнішнього API або локальної моделі.
   Next action: Тримати voice у backlog до завершення текстового сценарію.
+
+- Risk: Gemini fallback може повертати некоректний JSON або бути недоступним.
+  Impact: Неоднозначні повідомлення можуть не розпізнатися через AI fallback.
+  Next action: Local parser залишається основним шляхом; Gemini відповідь валідовується, а без `GEMINI_API_KEY` fallback вимкнений.
 ```
 
 ## Tests / Validation
 
 ```text
-Last tests run: 2026-06-07, `python -m unittest discover -s tests -q`.
-Result: 44 tests, OK.
+Last tests run: 2026-06-08, `python -m unittest discover -s tests -q`.
+Result: 69 tests, OK.
 Known test gaps:
 - `pytest` не встановлений у поточному Python, тому перевірка виконувалась через unittest.
-- Потрібні додаткові edge-case тести для timezone і DST.
+- Timezone/DST edge-case тести додано для Europe/Kyiv start/end; не покрито всі підтримувані timezone і неоднозначні локальні години під час fall-back.
+- Natural-language parser/fallback тести додано для local-first behavior, Gemini fallback routing, "нагадати" prefix і "N числа".
 - Потрібна інтеграційна перевірка доставки reminders у реальному Telegram runtime. `python src\main.py` поза sandbox не впав одразу і працював до timeout, що схоже на нормальний long-running polling процес; доставку тестового reminder ще потрібно перевірити вручну з ботом.
 ```
 
@@ -172,11 +188,11 @@ Known test gaps:
 
 ```text
 Перед кодом підтвердити наступну гілку реалізації:
-1. Додаткові timezone/DST edge-case tests.
-2. Local run verification з реальним `.env` і тестовою подією.
+1. Local run verification з реальним `.env` і тестовою подією.
+2. Перевірити Gemini fallback з реальним `GEMINI_API_KEY` на неоднозначному тексті.
 3. Voice/Whisper transcription.
 
-Рекомендація: спочатку timezone/DST edge-case tests або local run verification, потім voice/Whisper.
+Рекомендація: спочатку local run verification, потім voice/Whisper.
 ```
 
 ## End-of-Session Update Checklist

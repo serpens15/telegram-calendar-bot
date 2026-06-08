@@ -38,13 +38,44 @@ User action
 -> Telegram update
 -> Access check
 -> Message type detection
--> Text parser або Whisper transcription
+-> Parser Service
+-> Local parser
+-> Gemini fallback лише якщо local parser incomplete або confidence нижче threshold
 -> Date/time extraction and validation
 -> Confirmation preview
 -> User confirmation
 -> SQLite persistence
 -> Scheduler registration
 -> Telegram reminder message
+```
+
+### Natural Language Creation Flow
+
+```text
+Telegram Layer:
+  приймає одне текстове повідомлення користувача.
+
+Parser Service:
+  завжди запускає локальний parser першим.
+
+Local Parser:
+  покриває типові конструкції: сьогодні, завтра, післязавтра, через X хвилин,
+  через X годин, о/в HH:MM, дні тижня, конкретні дати та "N числа".
+
+AI Service / Gemini:
+  викликається тільки якщо local parser не зміг визначити дату, час або назву
+  або confidence нижче налаштованого threshold.
+  Повертає тільки структурований JSON: title, date, time, confidence.
+
+Event Service:
+  створює подію тільки після явного підтвердження користувачем.
+
+Notification Service:
+  координує планування reminders через scheduler.
+
+Google Calendar Service:
+  лишається adapter/stub для майбутнього етапу; реальна інтеграція не входить
+  у поточний text-first MVP.
 ```
 
 ## 4. Storage

@@ -76,12 +76,12 @@ class EventService:
         timezone: str,
     ) -> str:
         return (
-            "Подія:\n"
-            f"{title}\n\n"
+            "Подія\n\n"
+            f"Назва: {title}\n"
             f"Дата: {event_date.strftime('%d.%m.%Y')}\n"
             f"Час: {event_time.strftime('%H:%M')}\n"
             f"Часовий пояс: {timezone}\n\n"
-            "Створити подію?"
+            "Підтвердити створення?"
         )
 
     def build_created_text(self, event: EventRecord) -> str:

@@ -782,3 +782,61 @@ Test Scenarios:
 - Edge: відновлення після рестарту перевірене.
 
 Status: Done
+
+### TASK-018: Natural Language Event Creation with Gemini Fallback
+
+Goal:
+
+```text
+Дозволити користувачу створювати подію одним повідомленням природною мовою,
+використовуючи local parser першим і Gemini тільки як fallback при низькій
+впевненості або неповних даних.
+```
+
+Files:
+
+```text
+src/parsing/*
+src/services/ai/*
+src/bot/handlers.py
+src/bot/keyboards.py
+src/config/settings.py
+src/services/event_service.py
+tests/test_parsing.py
+tests/test_parser_service.py
+.env.example
+```
+
+Dependencies:
+
+```text
+TASK-006
+TASK-007
+TASK-015
+TASK-017
+```
+
+Acceptance Criteria:
+
+- [x] Local parser запускається першим для кожного текстового повідомлення.
+- [x] Gemini fallback викликається тільки якщо local parser incomplete або confidence нижче threshold.
+- [x] Gemini інтеграція вимкнена без `GEMINI_API_KEY`.
+- [x] Подія не створюється автоматично після розпізнавання.
+- [x] Користувач бачить confirmation з кнопками підтвердження, зміни дати, зміни часу та скасування.
+- [x] Зміна часу доступна через компактний inline pseudo-slider.
+
+Risks:
+
+```text
+Gemini API є зовнішньою залежністю: можливі latency, помилки API, зміни моделі
+або некоректний JSON. Тому local parser залишається основним шляхом, а Gemini
+є лише fallback.
+```
+
+Test Scenarios:
+
+- Positive: типові повідомлення створюють draft і показують confirmation.
+- Negative: без Gemini API key fallback не викликає зовнішній сервіс.
+- Edge: incomplete local parse може бути замінений валідним high-confidence AI result.
+
+Status: Done

@@ -61,6 +61,50 @@ class TimezoneServiceTest(unittest.TestCase):
 
         self.assertEqual(utc_time.isoformat(), "2026-06-07T12:00:00+00:00")
 
+    def test_to_utc_datetime_uses_standard_offset_before_dst_start(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repository.initialize()
+            service = TimezoneService(repository=repository, default_timezone="Europe/Kyiv")
+
+            local_time = datetime(2026, 3, 29, 1, 30)
+            utc_time = service.to_utc_datetime(local_time, "Europe/Kyiv")
+
+        self.assertEqual(utc_time.isoformat(), "2026-03-28T23:30:00+00:00")
+
+    def test_to_utc_datetime_uses_dst_offset_after_dst_start(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repository.initialize()
+            service = TimezoneService(repository=repository, default_timezone="Europe/Kyiv")
+
+            local_time = datetime(2026, 3, 29, 4, 30)
+            utc_time = service.to_utc_datetime(local_time, "Europe/Kyiv")
+
+        self.assertEqual(utc_time.isoformat(), "2026-03-29T01:30:00+00:00")
+
+    def test_to_utc_datetime_uses_dst_offset_before_dst_end(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repository.initialize()
+            service = TimezoneService(repository=repository, default_timezone="Europe/Kyiv")
+
+            local_time = datetime(2026, 10, 25, 2, 30)
+            utc_time = service.to_utc_datetime(local_time, "Europe/Kyiv")
+
+        self.assertEqual(utc_time.isoformat(), "2026-10-24T23:30:00+00:00")
+
+    def test_to_utc_datetime_uses_standard_offset_after_dst_end(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repository = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repository.initialize()
+            service = TimezoneService(repository=repository, default_timezone="Europe/Kyiv")
+
+            local_time = datetime(2026, 10, 25, 4, 30)
+            utc_time = service.to_utc_datetime(local_time, "Europe/Kyiv")
+
+        self.assertEqual(utc_time.isoformat(), "2026-10-25T02:30:00+00:00")
+
 
 if __name__ == "__main__":
     unittest.main()

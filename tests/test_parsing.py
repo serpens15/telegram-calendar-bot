@@ -20,6 +20,8 @@ class ParsingTest(unittest.TestCase):
         draft = parse_event_text("завтра о 15:00 зустріч", reference_date=date(2026, 6, 6))
 
         self.assertEqual(draft.status, "complete")
+        self.assertGreaterEqual(draft.confidence, 0.85)
+        self.assertEqual(draft.parser_source, "local")
         self.assertEqual(draft.title, "зустріч")
         self.assertEqual(draft.event_date, date(2026, 6, 7))
         self.assertEqual(draft.event_time.isoformat(), "15:00:00")
@@ -69,6 +71,37 @@ class ParsingTest(unittest.TestCase):
         self.assertEqual(draft.event_date, date(2026, 6, 8))
         self.assertEqual(draft.event_time.isoformat(), "10:45:00")
         self.assertEqual(draft.event_datetime.isoformat(), "2026-06-08T10:45:00")
+
+    def test_parse_remind_prefix_and_today_time(self) -> None:
+        draft = parse_event_text(
+            "Нагадати купити молоко сьогодні о 18:00",
+            reference_date=date(2026, 6, 8),
+        )
+
+        self.assertEqual(draft.status, "complete")
+        self.assertEqual(draft.title, "купити молоко")
+        self.assertEqual(draft.event_date, date(2026, 6, 8))
+        self.assertEqual(draft.event_time.isoformat(), "18:00:00")
+
+    def test_parse_day_of_month(self) -> None:
+        draft = parse_event_text(
+            "Нагадати оплатити інтернет 15 числа о 12:00",
+            reference_date=date(2026, 6, 8),
+        )
+
+        self.assertEqual(draft.status, "complete")
+        self.assertEqual(draft.title, "оплатити інтернет")
+        self.assertEqual(draft.event_date, date(2026, 6, 15))
+        self.assertEqual(draft.event_time.isoformat(), "12:00:00")
+
+    def test_parse_day_of_month_rolls_to_next_month(self) -> None:
+        draft = parse_event_text(
+            "Нагадати оплатити інтернет 15 числа о 12:00",
+            reference_date=date(2026, 6, 20),
+        )
+
+        self.assertEqual(draft.status, "complete")
+        self.assertEqual(draft.event_date, date(2026, 7, 15))
 
     def test_parse_relative_hour_word(self) -> None:
         draft = parse_event_text(

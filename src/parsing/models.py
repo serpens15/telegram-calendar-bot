@@ -8,6 +8,7 @@ from typing import Literal
 
 
 ParseStatus = Literal["complete", "needs_clarification", "invalid"]
+ParserSource = Literal["local", "gemini"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,3 +21,5 @@ class ParsedEventDraft:
     status: ParseStatus
     missing_fields: tuple[str, ...] = ()
     errors: tuple[str, ...] = ()
+    confidence: float = 0.0
+    parser_source: ParserSource = "local"

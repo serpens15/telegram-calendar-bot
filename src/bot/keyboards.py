@@ -18,9 +18,13 @@ EVENT_DELETE_CALLBACK_PREFIX = "event:delete:"
 EVENT_DELETE_CONFIRM_CALLBACK_PREFIX = "event:delete:confirm:"
 EVENT_CREATE_CONFIRM_CALLBACK = "event:create:confirm"
 EVENT_CREATE_CANCEL_CALLBACK = "event:create:cancel"
+EVENT_CREATE_EDIT_DATE_CALLBACK = "event:create:edit_date"
+EVENT_CREATE_EDIT_TIME_CALLBACK = "event:create:edit_time"
 EVENT_CREATE_DATE_CALLBACK_PREFIX = "event:create:date:"
 EVENT_CREATE_TIME_CALLBACK_PREFIX = "event:create:time:"
 EVENT_CREATE_RELATIVE_CALLBACK_PREFIX = "event:create:relative:"
+EVENT_CREATE_TIME_SLIDER_CALLBACK_PREFIX = "event:create:time_slider:"
+EVENT_CREATE_TIME_SLIDER_DONE_CALLBACK = "event:create:time_slider:done"
 EVENT_DELETE_CANCEL_CALLBACK = "event:delete:cancel"
 
 SUPPORTED_TIMEZONES: tuple[str, ...] = (
@@ -86,6 +90,12 @@ def event_confirmation_keyboard():
         inline_keyboard=[
             [
                 _inline_button("✅ Підтвердити", EVENT_CREATE_CONFIRM_CALLBACK),
+            ],
+            [
+                _inline_button("✏️ Змінити дату", EVENT_CREATE_EDIT_DATE_CALLBACK),
+                _inline_button("✏️ Змінити час", EVENT_CREATE_EDIT_TIME_CALLBACK),
+            ],
+            [
                 _inline_button("❌ Скасувати", EVENT_CREATE_CANCEL_CALLBACK),
             ]
         ]
@@ -133,6 +143,42 @@ def event_time_selection_keyboard():
                 _inline_button("18:00", f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}18:00"),
                 _inline_button("21:00", f"{EVENT_CREATE_TIME_CALLBACK_PREFIX}21:00"),
             ],
+        ]
+    )
+
+
+def event_time_slider_keyboard(selected_hour: int, selected_minute: int):
+    from aiogram.types import InlineKeyboardMarkup
+
+    hour = selected_hour % 24
+    minute = selected_minute % 60
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [_inline_button("Година:", "event:create:noop")],
+            [
+                _inline_button(
+                    "◀️",
+                    f"{EVENT_CREATE_TIME_SLIDER_CALLBACK_PREFIX}hour:-1",
+                ),
+                _inline_button(f"{hour:02d}", "event:create:noop"),
+                _inline_button(
+                    "▶️",
+                    f"{EVENT_CREATE_TIME_SLIDER_CALLBACK_PREFIX}hour:1",
+                ),
+            ],
+            [_inline_button("Хвилини:", "event:create:noop")],
+            [
+                _inline_button(
+                    "◀️",
+                    f"{EVENT_CREATE_TIME_SLIDER_CALLBACK_PREFIX}minute:-5",
+                ),
+                _inline_button(f"{minute:02d}", "event:create:noop"),
+                _inline_button(
+                    "▶️",
+                    f"{EVENT_CREATE_TIME_SLIDER_CALLBACK_PREFIX}minute:5",
+                ),
+            ],
+            [_inline_button("Готово", EVENT_CREATE_TIME_SLIDER_DONE_CALLBACK)],
         ]
     )
 

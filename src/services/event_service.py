@@ -158,7 +158,7 @@ class EventService:
         return self.repository.list_future_events_for_user(telegram_id)
 
     def get_events_for_deletion(self, telegram_id: int) -> list[EventRecord]:
-        return self.repository.list_events_for_user(telegram_id)
+        return self.repository.list_future_events_for_user(telegram_id)
 
     def delete_event(self, telegram_id: int, event_id: int) -> EventRecord | None:
         return self.repository.delete_event_for_user(telegram_id, event_id)

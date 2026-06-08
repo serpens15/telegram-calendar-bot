@@ -145,6 +145,7 @@ class SQLiteRepositoryTest(unittest.TestCase):
 
             self.assertNotIn(past_event.id, future_ids)
             self.assertIn(future_event.id, future_ids)
+            self.assertIsNone(repo.get_event_by_id(past_event.id))
 
     def test_delete_event_for_user_removes_matching_event_only(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -174,6 +175,45 @@ class SQLiteRepositoryTest(unittest.TestCase):
             self.assertIsNone(missing)
             self.assertEqual(repo.list_events_for_user(222), [])
             self.assertEqual(repo.list_events_for_user(333)[0].id, second_event.id)
+
+    def test_cleanup_completed_events_removes_only_events_without_pending_reminders(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+
+            completed_event = repo.create_event(
+                222,
+                title="Completed",
+                event_at="2025-06-06T10:00:00+03:00",
+                event_at_utc="2025-06-06T07:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+            repo.create_reminder(
+                completed_event.id,
+                reminder_at="2025-06-06T10:00:00+03:00",
+                reminder_at_utc="2025-06-06T07:00:00+00:00",
+                status="sent",
+                sent_at="2025-06-06T07:00:01+00:00",
+            )
+            pending_event = repo.create_event(
+                222,
+                title="Pending delivery",
+                event_at="2025-06-07T10:00:00+03:00",
+                event_at_utc="2025-06-07T07:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+            repo.create_reminder(
+                pending_event.id,
+                reminder_at="2025-06-07T10:00:00+03:00",
+                reminder_at_utc="2025-06-07T07:00:00+00:00",
+            )
+
+            removed_count = repo.cleanup_completed_events("2026-06-08T00:00:00+00:00")
+
+            self.assertEqual(removed_count, 1)
+            self.assertIsNone(repo.get_event_by_id(completed_event.id))
+            self.assertIsNotNone(repo.get_event_by_id(pending_event.id))
+            self.assertEqual(len(repo.list_reminders_for_event(completed_event.id)), 0)
 
 
 if __name__ == "__main__":

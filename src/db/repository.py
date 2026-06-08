@@ -326,6 +326,42 @@ class SQLiteRepository:
             )
         return _row_to_dataclass(EventRecord, row)
 
+    def delete_event(self, event_id: int) -> EventRecord | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM events WHERE id = ?",
+                (event_id,),
+            ).fetchone()
+            if row is None:
+                return None
+
+            connection.execute(
+                "DELETE FROM events WHERE id = ?",
+                (event_id,),
+            )
+        return _row_to_dataclass(EventRecord, row)
+
+    def cleanup_completed_events(self, cutoff_utc: str | None = None) -> int:
+        cleanup_cutoff = (
+            cutoff_utc
+            or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        )
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM events
+                WHERE datetime(event_at_utc) < datetime(?)
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM reminders
+                      WHERE reminders.event_id = events.id
+                        AND reminders.status = 'pending'
+                  )
+                """,
+                (cleanup_cutoff,),
+            )
+        return cursor.rowcount
+
     def get_reminder_by_id(self, reminder_id: int) -> ReminderRecord | None:
         with self.connect() as connection:
             row = connection.execute(
@@ -449,6 +485,7 @@ class SQLiteRepository:
 
     def list_future_events_for_user(self, telegram_id: int) -> list[EventRecord]:
         now_utc = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        self.cleanup_completed_events(now_utc)
         with self.connect() as connection:
             rows = connection.execute(
                 """

@@ -494,6 +494,13 @@ class BotHandlersTest(unittest.TestCase):
                 timezone_service=timezone_service,
             )
 
+            past_event = repo.create_event(
+                111,
+                title="Стара подія",
+                event_at="2025-07-01T10:00:00+03:00",
+                event_at_utc="2025-07-01T07:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
             first_event = repo.create_event(
                 111,
                 title="Сонячна зустріч",
@@ -533,6 +540,8 @@ class BotHandlersTest(unittest.TestCase):
             self.assertEqual(keyboard[0][0].callback_data, f"event:delete:{first_event.id}")
             self.assertEqual(keyboard[1][0].text, f"Видалити: {second_event.title}")
             self.assertEqual(keyboard[1][0].callback_data, f"event:delete:{second_event.id}")
+            self.assertNotIn(past_event.title, message.answer.await_args.args[0])
+            self.assertIsNone(repo.get_event_by_id(past_event.id))
 
     def test_list_and_delete_buttons_stay_in_sync_after_db_changes(self) -> None:
         with TemporaryDirectory() as temp_dir:

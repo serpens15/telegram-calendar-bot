@@ -116,10 +116,40 @@ class ReminderSchedulerServiceTest(unittest.TestCase):
             asyncio.run(service._deliver_reminder(reminder.id))
             stored_reminder = repo.get_reminder_by_id(reminder.id)
 
-        self.assertEqual(bot.messages, [(111, "Нагадування про подію:\n\nНазва: Planning\nКоли: 2026-06-07T15:00:00+03:00\nЧасовий пояс: Europe/Kyiv")])
+        self.assertEqual(bot.messages, [(111, "15:00 Planning")])
         self.assertEqual(stored_reminder.status, "sent")
         self.assertIsNotNone(stored_reminder.sent_at)
         self.assertEqual(event.id, reminder.event_id)
+
+    def test_deliver_event_time_reminder_deletes_completed_event(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+            event, reminder = repo.create_event_with_reminder(
+                111,
+                title="Planning",
+                event_at="2026-06-07T15:00:00+03:00",
+                event_at_utc="2026-06-07T12:00:00+00:00",
+                reminder_at="2026-06-07T15:00:00+03:00",
+                reminder_at_utc="2026-06-07T12:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+            bot = _FakeBot()
+            service = ReminderSchedulerService(
+                repository=repo,
+                timezone_service=TimezoneService(
+                    repository=repo,
+                    default_timezone="Europe/Kyiv",
+                ),
+                bot=bot,
+                scheduler=_FakeScheduler(),
+            )
+
+            asyncio.run(service._deliver_reminder(reminder.id))
+
+            self.assertEqual(bot.messages[0][0], 111)
+            self.assertIsNone(repo.get_event_by_id(event.id))
+            self.assertIsNone(repo.get_reminder_by_id(reminder.id))
 
     def test_deliver_reminder_skips_missing_rows(self) -> None:
         with TemporaryDirectory() as temp_dir:

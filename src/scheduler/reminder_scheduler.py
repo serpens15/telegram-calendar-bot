@@ -150,12 +150,7 @@ class ReminderSchedulerService:
         if context is None or context.reminder.status != "pending":
             return
 
-        message = (
-            "Нагадування про подію:\n\n"
-            f"Назва: {context.event.title}\n"
-            f"Коли: {context.event.event_at}\n"
-            f"Часовий пояс: {context.timezone}"
-        )
+        message = f"{self._format_event_time(context.event.event_at)} {context.event.title}"
 
         try:
             await self.bot.send_message(chat_id=context.telegram_id, text=message)
@@ -167,9 +162,20 @@ class ReminderSchedulerService:
             reminder_id,
             sent_at=datetime.now(dt_timezone.utc).isoformat(),
         )
+        if self._is_event_time_reminder(context.reminder.reminder_at_utc, context.event.event_at_utc):
+            self.repository.delete_event(context.event.id)
 
     def _parse_utc_datetime(self, value: str) -> datetime:
         parsed = datetime.fromisoformat(value)
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=dt_timezone.utc)
         return parsed.astimezone(dt_timezone.utc)
+
+    def _is_event_time_reminder(self, reminder_at_utc: str, event_at_utc: str) -> bool:
+        return self._parse_utc_datetime(reminder_at_utc) >= self._parse_utc_datetime(event_at_utc)
+
+    def _format_event_time(self, event_at: str) -> str:
+        try:
+            return datetime.fromisoformat(event_at).strftime("%H:%M")
+        except ValueError:
+            return event_at

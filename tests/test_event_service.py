@@ -50,6 +50,39 @@ class EventServiceTest(unittest.TestCase):
             ],
         )
 
+    def test_get_events_for_deletion_returns_only_future_events(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+            timezone_service = TimezoneService(
+                repository=repo,
+                default_timezone="Europe/Kyiv",
+            )
+            service = EventService(
+                repository=repo,
+                timezone_service=timezone_service,
+            )
+
+            past_event = repo.create_event(
+                111,
+                title="Минуле",
+                event_at="2025-06-15T18:00:00+03:00",
+                event_at_utc="2025-06-15T15:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+            future_event = repo.create_event(
+                111,
+                title="Майбутнє",
+                event_at="2027-06-15T18:00:00+03:00",
+                event_at_utc="2027-06-15T15:00:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+
+            deletion_events = service.get_events_for_deletion(111)
+
+            self.assertEqual([event.id for event in deletion_events], [future_event.id])
+            self.assertIsNone(repo.get_event_by_id(past_event.id))
+
 
 if __name__ == "__main__":
     unittest.main()

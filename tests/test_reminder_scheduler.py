@@ -50,8 +50,14 @@ class _FakeScheduler:
 
 
 class _FakeBot:
-    def __init__(self) -> None:
+    def __init__(self, bot_id: int = 999) -> None:
+        self.bot_id = bot_id
         self.messages: list[tuple[int, str]] = []
+        self.get_me_calls = 0
+
+    async def get_me(self):
+        self.get_me_calls += 1
+        return types.SimpleNamespace(id=self.bot_id)
 
     async def send_message(self, chat_id: int, text: str) -> None:
         self.messages.append((chat_id, text))
@@ -148,6 +154,37 @@ class ReminderSchedulerServiceTest(unittest.TestCase):
             asyncio.run(service._deliver_reminder(reminder.id))
 
             self.assertEqual(bot.messages[0][0], 111)
+            self.assertIsNone(repo.get_event_by_id(event.id))
+            self.assertIsNone(repo.get_reminder_by_id(reminder.id))
+
+    def test_deliver_reminder_deletes_event_when_recipient_is_bot(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo = SQLiteRepository(Path(temp_dir) / "calendar.sqlite3")
+            repo.initialize()
+            event, reminder = repo.create_event_with_reminder(
+                999,
+                title="Invalid recipient",
+                event_at="2026-06-07T15:00:00+03:00",
+                event_at_utc="2026-06-07T12:00:00+00:00",
+                reminder_at="2026-06-07T14:45:00+03:00",
+                reminder_at_utc="2026-06-07T11:45:00+00:00",
+                timezone="Europe/Kyiv",
+            )
+            bot = _FakeBot(bot_id=999)
+            service = ReminderSchedulerService(
+                repository=repo,
+                timezone_service=TimezoneService(
+                    repository=repo,
+                    default_timezone="Europe/Kyiv",
+                ),
+                bot=bot,
+                scheduler=_FakeScheduler(),
+            )
+
+            asyncio.run(service._deliver_reminder(reminder.id))
+
+            self.assertEqual(bot.messages, [])
+            self.assertEqual(bot.get_me_calls, 1)
             self.assertIsNone(repo.get_event_by_id(event.id))
             self.assertIsNone(repo.get_reminder_by_id(reminder.id))
 

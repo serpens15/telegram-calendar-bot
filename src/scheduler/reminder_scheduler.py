@@ -107,6 +107,7 @@ class ReminderSchedulerService:
     default_reminder_minutes: int = 15
     scheduler: AsyncIOScheduler | None = None
     _started: bool = field(default=False, init=False)
+    _bot_id: int | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if self.scheduler is None:
@@ -150,6 +151,15 @@ class ReminderSchedulerService:
         if context is None or context.reminder.status != "pending":
             return
 
+        if await self._is_bot_recipient(context.telegram_id):
+            logger.warning(
+                "Deleting reminder event %s because recipient %s is the bot itself",
+                context.event.id,
+                context.telegram_id,
+            )
+            self.repository.delete_event(context.event.id)
+            return
+
         message = f"{self._format_event_time(context.event.event_at)} {context.event.title}"
 
         try:
@@ -179,3 +189,15 @@ class ReminderSchedulerService:
             return datetime.fromisoformat(event_at).strftime("%H:%M")
         except ValueError:
             return event_at
+
+    async def _is_bot_recipient(self, telegram_id: int) -> bool:
+        bot_id = await self._get_bot_id()
+        return bot_id is not None and telegram_id == bot_id
+
+    async def _get_bot_id(self) -> int | None:
+        if self._bot_id is not None:
+            return self._bot_id
+
+        bot_info = await self.bot.get_me()
+        self._bot_id = getattr(bot_info, "id", None)
+        return self._bot_id
